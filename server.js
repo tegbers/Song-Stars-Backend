@@ -199,39 +199,48 @@ async function viaDemo() {
 async function viaApiframe({ title, tags, prompt, lyrics }) {
   const key = process.env.APIFRAME_KEY;
   if (!key) throw new Error("Set APIFRAME_KEY in .env");
+  const headers = { "Content-Type": "application/json", "X-API-Key": key };
 
-  // Suno takes EITHER your own lyrics OR a prompt to write them — never both.
-  const body = { model: "V4_5", make_instrumental: false, title, tags: (tags || "").slice(0, 950) };
-  if (lyrics && lyrics.trim()) body.lyrics = lyrics; else body.prompt = prompt;
+  // Apiframe v2: in custom mode the prompt IS the lyrics; otherwise it's a short
+  // description (Suno caps the description at 500 chars). Style/title go in sunoParams.
+  const custom = !!(lyrics && lyrics.trim());
+  const body = {
+    model: "suno",
+    prompt: custom ? lyrics.slice(0, 4900) : (prompt || "").slice(0, 490),
+    sunoParams: {
+      custom_mode: custom,
+      title: (title || "Song Stars").slice(0, 80),
+      style: (tags || "").slice(0, 990),
+      model_version: "V4_5PLUS",
+      instrumental: false,
+    },
+  };
 
-  const submit = await fetch("https://api.apiframe.pro/suno-imagine", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: key },
-    body: JSON.stringify(body),
+  const submit = await fetch("https://api.apiframe.ai/v2/music/generate", {
+    method: "POST", headers, body: JSON.stringify(body),
   });
   if (!submit.ok) {
     const errText = await submit.text().catch(() => "");
     throw new Error("Apiframe submit failed: " + submit.status + " " + errText.slice(0, 300));
   }
-  const { task_id } = await submit.json();
-  if (!task_id) throw new Error("No task_id from Apiframe");
+  const { jobId } = await submit.json();
+  if (!jobId) throw new Error("No jobId from Apiframe");
 
+  // Poll the job until Suno finishes (~30-60s). v2 returns 2 tracks.
   return pollUntil(async () => {
-    const r = await fetch("https://api.apiframe.pro/fetch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: key },
-      body: JSON.stringify({ task_id }),
-    });
+    const r = await fetch("https://api.apiframe.ai/v2/jobs/" + jobId, { headers });
     const d = await r.json();
-    const ready = d && d.status === "finished" && Array.isArray(d.songs) && d.songs[0] && d.songs[0].audio_url;
-    if (!ready) return null;
-    const a = d.songs[0], b = d.songs[1];
-    return {
-      audioUrl: a.audio_url, imageUrl: a.image_url, lyrics: a.lyrics,
-      // version B — used as the instant, free "remake" (already generated & paid for)
-      alt: b && b.audio_url ? { audioUrl: b.audio_url, imageUrl: b.image_url, lyrics: b.lyrics } : null,
-    };
-  });
+    if (d.status === "FAILED") throw new Error("Suno failed: " + JSON.stringify(d.error || d).slice(0, 200));
+    const tracks = d.result && d.result.tracks;
+    if (d.status === "COMPLETED" && Array.isArray(tracks) && tracks[0] && tracks[0].audioUrl) {
+      const a = tracks[0], b = tracks[1];
+      return {
+        audioUrl: a.audioUrl, imageUrl: a.imageUrl, lyrics: lyrics || null,
+        alt: b && b.audioUrl ? { audioUrl: b.audioUrl, imageUrl: b.imageUrl, lyrics: lyrics || null } : null,
+      };
+    }
+    return null;
+  }, { tries: 60, every: 3000 });
 }
 
 /* ---------- SELF-HOSTED (gcui-art/suno-api) ----------
