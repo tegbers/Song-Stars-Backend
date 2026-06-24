@@ -200,19 +200,19 @@ async function viaApiframe({ title, tags, prompt, lyrics }) {
   const key = process.env.APIFRAME_KEY;
   if (!key) throw new Error("Set APIFRAME_KEY in .env");
 
+  // Suno takes EITHER your own lyrics OR a prompt to write them — never both.
+  const body = { model: "V4_5", make_instrumental: false, title, tags: (tags || "").slice(0, 950) };
+  if (lyrics && lyrics.trim()) body.lyrics = lyrics; else body.prompt = prompt;
+
   const submit = await fetch("https://api.apiframe.pro/suno-imagine", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: key },
-    body: JSON.stringify({
-      prompt,
-      lyrics: lyrics || undefined,   // if blank, Suno writes the lyrics
-      tags,                          // rich style preset, e.g. "gentle lullaby, soft piano…"
-      title,
-      model: "V4_5",
-      make_instrumental: false,
-    }),
+    body: JSON.stringify(body),
   });
-  if (!submit.ok) throw new Error("Apiframe submit failed: " + submit.status);
+  if (!submit.ok) {
+    const errText = await submit.text().catch(() => "");
+    throw new Error("Apiframe submit failed: " + submit.status + " " + errText.slice(0, 300));
+  }
   const { task_id } = await submit.json();
   if (!task_id) throw new Error("No task_id from Apiframe");
 
