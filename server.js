@@ -19,7 +19,9 @@
 
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 require("dotenv").config();
+const accounts = require("./accounts");
 
 const app = express();
 app.use(cors());                 // lock this to your app's domain before launch
@@ -27,6 +29,19 @@ app.use(express.json());
 
 const PROVIDER = (process.env.PROVIDER || "demo").toLowerCase();
 const PORT = process.env.PORT || 8787;
+
+/* Interim abuse guard: cap song generations per IP per window (resets on restart).
+   A speed bump that stops runaway drain — incl. the private-browser trick, since
+   those share one IP — until proper per-account server-side limits exist. */
+const RATE = new Map();
+const RATE_MAX = Number(process.env.RATE_MAX || 20);
+const RATE_WINDOW_MS = Number(process.env.RATE_WINDOW_MS || 60 * 60 * 1000);
+function rateOk(ip) {
+  const now = Date.now(), r = RATE.get(ip);
+  if (!r || now > r.resetAt) { RATE.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS }); return true; }
+  if (r.count >= RATE_MAX) return false;
+  r.count++; return true;
+}
 const DEMO_TRACK = "https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749d484.mp3";
 
 /* ============================================================
@@ -92,7 +107,7 @@ function buildSongPrompt({ names, about, category, mood, fallback }) {
    ============================================================ */
 const LYRICS_PROVIDER = (process.env.LYRICS_PROVIDER || "off").toLowerCase();
 
-function lyricBrief({ names, about, genre, category, vibe, pronounce }) {
+function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const cat = (category || "").toLowerCase();
   let occ = "";
@@ -100,6 +115,9 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce }) {
   else if (/pet/.test(cat)) occ = "It's a fun, loving song about their pet. ";
   else if (/fam/.test(cat)) occ = "It's about their whole family. ";
   const feel = vibe ? `Overall feel: ${vibe}. ` : "";
+  const must = (mustHave && String(mustHave).trim())
+    ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
+    : "";
   const pron = pronounce
     ? `The name is pronounced "${pronounce}" — make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
@@ -107,7 +125,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce }) {
 About them: ${about || "a wonderful person"}. ${occ}${feel}
 Rules:
 - Sing the name "${first}" clearly in EVERY chorus, and at least once in a verse. ${pron}
-- Use these section tags on their own lines: [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus].
+${must}- Use these section tags on their own lines: [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus].
 - Catchy, singable chorus. Warm, fun and 100% family-friendly. No explicit content.
 - Keep it concise, about 16 to 24 lines total.
 Output ONLY the lyrics with the section tags. Nothing else.`;
@@ -159,17 +177,35 @@ async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
    Body: { title, genre, prompt, lyrics }
    Returns: { audioUrl }
    ------------------------------------------------------------ */
-app.post("/api/generate", async (req, res) => {
-  const { title, genre, prompt, lyrics, names, about, category, mood, vibe, pronounce } = req.body || {};
+app.post("/api/generate", accounts.requireAuth, async (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection — please slow down a bit." });
+
+  const { title, genre, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
   const tags = styleFor(mood || genre) + vibeTag(vibe);
   const fullPrompt = buildSongPrompt({ names, about, category, mood: mood || genre, fallback: prompt });
   if (!fullPrompt) return res.status(400).json({ error: "Missing prompt" });
+
+  // --- entitlement: claim ONE song server-side (paid credit or a free song,
+  //     capped per account AND per device). 'none' => must pay. ---
+  let mode = "open";
+  if (accounts.accountsEnabled() && req.user) {
+    try {
+      mode = await accounts.claimSong(req.user.id, fingerprint);
+    } catch (e) {
+      console.error("claimSong:", e.message);
+      return res.status(500).json({ error: "Could not check your song balance. Try again." });
+    }
+    if (mode === "none") {
+      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs — grab a Single or Album to keep making music." });
+    }
+  }
 
   try {
     // Write the words first (locks the name into every chorus). Falls back to
     // Suno's own lyrics if LYRICS_PROVIDER is off or the call fails.
     let finalLyrics = lyrics;
-    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: mood || genre, category, vibe, pronounce });
+    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: mood || genre, category, vibe, pronounce, mustHave });
 
     let out;
     if (PROVIDER === "apiframe")        out = await viaApiframe({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
@@ -178,10 +214,33 @@ app.post("/api/generate", async (req, res) => {
     else                                out = await viaDemo();
 
     if (!out || !out.audioUrl) throw new Error("No audio returned");
-    res.json({ ...out, provider: PROVIDER });
+
+    // success: keep a server-side copy + return the user's fresh balance
+    let status = null;
+    if (accounts.accountsEnabled() && req.user) {
+      accounts.recordSong(req.user.id, { title, audioUrl: out.audioUrl, imageUrl: out.imageUrl, isFree: mode === "free" });
+      status = await accounts.statusFor(req.user.id, fingerprint);
+    }
+    res.json({ ...out, provider: PROVIDER, status });
   } catch (err) {
+    // our failure, not theirs: give the song back
+    if (accounts.accountsEnabled() && req.user && (mode === "paid" || mode === "free")) {
+      await accounts.releaseSong(req.user.id, fingerprint, mode);
+    }
     console.error("generate failed:", err.message);
     res.status(502).json({ error: "Generation failed", detail: err.message });
+  }
+});
+
+/* The app reads this after sign-in (and after a payment) to know the
+   user's real, server-side balance + free songs left. */
+app.get("/api/me", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false });
+  try {
+    const status = await accounts.statusFor(req.user.id, req.query.fingerprint);
+    res.json({ accounts: true, email: req.user.email || null, ...status });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -257,8 +316,8 @@ async function viaSelfHost({ prompt, tags, lyrics }) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: lyrics || prompt,        // lyrics if provided, else let Suno write them
-      tags,                            // genre/style preset
+      prompt: lyrics || prompt,
+      tags,
       title: undefined,
       make_instrumental: false,
       wait_audio: false,
@@ -341,9 +400,32 @@ function stripEmoji(s = "") { return s.replace(/[^\w &/-]/g, "").trim(); }
    ============================================================ */
 const PAY_PROVIDER = (process.env.PAY_PROVIDER || "demo").toLowerCase();
 
-app.post("/api/pay/create", async (req, res) => {
+/* PayFast requires an md5 signature of the fields (in order) + your passphrase. */
+function payfastSignature(fields, passphrase) {
+  let str = Object.keys(fields)
+    .filter((k) => fields[k] !== "" && fields[k] !== undefined && fields[k] !== null)
+    .map((k) => `${k}=${encodeURIComponent(String(fields[k]).trim()).replace(/%20/g, "+")}`)
+    .join("&");
+  if (passphrase) str += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, "+")}`;
+  return crypto.createHash("md5").update(str).digest("hex");
+}
+
+app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
   const { packId, amount, qty, email } = req.body || {};
   if (!amount || !qty) return res.status(400).json({ error: "Missing amount/qty" });
+
+  // Record the order server-side FIRST (pending). Songs are only credited
+  // once payment is confirmed (webhook or /api/pay/confirm) — never from the browser.
+  let orderId = null;
+  if (accounts.accountsEnabled() && req.user) {
+    try {
+      orderId = await accounts.createOrder({ userId: req.user.id, packId, qty, amountCents: Math.round(amount * 100) });
+    } catch (e) {
+      console.error("createOrder:", e.message);
+      return res.status(500).json({ error: "Could not start your order. Try again." });
+    }
+  }
+
   try {
     if (PAY_PROVIDER === "yoco") {
       // Yoco Checkout API — amount in cents (ZAR). Docs: https://developer.yoco.com
@@ -353,53 +435,97 @@ app.post("/api/pay/create", async (req, res) => {
         body: JSON.stringify({
           amount: Math.round(amount * 100),
           currency: "ZAR",
-          metadata: { packId, qty, email },
-          successUrl: `${process.env.APP_URL || ""}/song-stars.html?paid=${qty}`,
-          cancelUrl: `${process.env.APP_URL || ""}/song-stars.html`,
+          metadata: { orderId: orderId || "", packId, qty, email },
+          successUrl: `${process.env.APP_URL || ""}/?order=${orderId || ""}`,
+          cancelUrl: `${process.env.APP_URL || ""}/`,
         }),
       });
-      if (!r.ok) throw new Error("Yoco checkout failed: " + r.status);
+      if (!r.ok) throw new Error("Yoco checkout failed: " + r.status + " " + (await r.text().catch(() => "")).slice(0, 200));
       const d = await r.json();
-      return res.json({ provider: "yoco", redirectUrl: d.redirectUrl, id: d.id });
+      if (orderId) await accounts.attachCheckout(orderId, d.id);
+      return res.json({ provider: "yoco", redirectUrl: d.redirectUrl, id: d.id, orderId });
     }
 
     if (PAY_PROVIDER === "payfast") {
-      // PayFast redirects to a hosted page built from signed form fields.
-      // Build params, sign with your passphrase, return the redirect URL.
-      // Docs: https://developers.payfast.co.za  (set PAYFAST_* in .env)
       const base = process.env.PAYFAST_SANDBOX === "true"
         ? "https://sandbox.payfast.co.za/eng/process"
         : "https://www.payfast.co.za/eng/process";
-      const params = {
+      const fields = {
         merchant_id: process.env.PAYFAST_MERCHANT_ID,
         merchant_key: process.env.PAYFAST_MERCHANT_KEY,
-        amount: Number(amount).toFixed(2),
-        item_name: `Song Stars - ${packId}`,
-        custom_int1: qty,
-        email_address: email || "",
-        return_url: `${process.env.APP_URL || ""}/song-stars.html?paid=${qty}`,
-        cancel_url: `${process.env.APP_URL || ""}/song-stars.html`,
+        return_url: `${process.env.APP_URL || ""}/?order=${orderId || ""}`,
+        cancel_url: `${process.env.APP_URL || ""}/`,
         notify_url: `${process.env.APP_URL || ""}/api/pay/webhook`,
+        m_payment_id: orderId || "",
+        email_address: email || "",
+        amount: Number(amount).toFixed(2),
+        item_name: `Song Stars - ${qty} track${qty > 1 ? "s" : ""}`,
+        custom_int1: String(qty),
+        custom_str1: orderId || "",
       };
-      const redirectUrl = base + "?" + new URLSearchParams(params).toString();
-      // NOTE: add the PayFast signature (md5 of params + passphrase) before going live.
-      return res.json({ provider: "payfast", redirectUrl });
+      const signature = payfastSignature(fields, process.env.PAYFAST_PASSPHRASE);
+      const redirectUrl = base + "?" + new URLSearchParams({ ...fields, signature }).toString();
+      return res.json({ provider: "payfast", redirectUrl, orderId });
     }
 
-    // demo
-    return res.json({ provider: "demo", status: "granted", qty });
+    // demo: no real charge — credit instantly so the flow is testable end-to-end.
+    if (accounts.accountsEnabled() && req.user && orderId) {
+      await accounts.markOrderPaidAndCredit({ orderId });
+    }
+    return res.json({ provider: "demo", status: "granted", qty, orderId });
   } catch (err) {
     console.error("pay/create failed:", err.message);
     res.status(502).json({ error: "Payment init failed", detail: err.message });
   }
 });
 
-/* Provider calls this on a successful payment. VERIFY before crediting. */
-app.post("/api/pay/webhook", (req, res) => {
-  // TODO: verify the signature/ITN with the provider, look up the order,
-  // then credit qty songs to the buyer's account in your database.
-  console.log("payment webhook:", PAY_PROVIDER, JSON.stringify(req.body).slice(0, 300));
-  res.sendStatus(200);
+/* After returning from Yoco, the app calls this with its orderId. We ask Yoco
+   whether the checkout actually completed, then credit — so the browser can
+   never grant itself songs. Idempotent. */
+app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false });
+  const { orderId } = req.body || {};
+  if (!orderId) return res.status(400).json({ error: "Missing orderId" });
+  try {
+    if (PAY_PROVIDER === "yoco") {
+      const order = await accounts.findOrder({ orderId, userId: req.user.id });
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.status !== "paid" && order.yoco_checkout_id) {
+        const r = await fetch(`https://payments.yoco.com/api/checkouts/${order.yoco_checkout_id}`, {
+          headers: { Authorization: `Bearer ${process.env.YOCO_SECRET_KEY}` },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if ((d.status || "").toLowerCase() === "completed") {
+            await accounts.markOrderPaidAndCredit({ checkoutId: order.yoco_checkout_id });
+          }
+        }
+      }
+    }
+    const status = await accounts.statusFor(req.user.id, req.body.fingerprint);
+    res.json({ accounts: true, ...status });
+  } catch (e) {
+    console.error("pay/confirm:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* Yoco calls this on payment events. Credits the order (idempotent). */
+app.post("/api/pay/webhook", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const payload = body.payload || body.data || body;
+    const checkoutId = payload.id || payload.checkoutId || (payload.metadata && payload.metadata.checkoutId);
+    const metaOrderId = payload.metadata && payload.metadata.orderId;
+    const succeeded = /succeed|complete|paid|success/i.test(String(body.type || payload.status || ""));
+    if (accounts.accountsEnabled() && succeeded && (checkoutId || metaOrderId)) {
+      await accounts.markOrderPaidAndCredit({ checkoutId, orderId: metaOrderId });
+    }
+    console.log("payment webhook:", PAY_PROVIDER, String(body.type || ""), checkoutId || metaOrderId || "");
+  } catch (e) {
+    console.error("webhook:", e.message);
+  }
+  res.sendStatus(200); // always 200 so the provider doesn't retry-storm
 });
 
 app.get("/", (_req, res) => res.send(`Song Stars backend · songs:${PROVIDER} · pay:${PAY_PROVIDER}`));
