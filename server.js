@@ -488,7 +488,9 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         // ITN (server-to-server) must hit the BACKEND, not the frontend.
         notify_url: `${process.env.BACKEND_URL || "https://song-stars-backend.onrender.com"}/api/pay/webhook`,
         // PayFast canonical order: buyer details (email) BEFORE transaction details (m_payment_id, amount...).
-        email_address: email || "",
+        // In SANDBOX, never send the merchant's own email — PayFast blocks "paying yourself".
+        // Use a neutral test buyer so the sandbox Test Merchant page (and full ITN loop) is reachable.
+        email_address: process.env.PAYFAST_SANDBOX === "true" ? "theo@melonmobile.co.za" : (email || ""),
         m_payment_id: orderId || "",
         amount: Number(amount).toFixed(2),
         item_name: `Song Stars - ${qty} track${qty > 1 ? "s" : ""}`,
