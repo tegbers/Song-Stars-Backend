@@ -461,8 +461,9 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         cancel_url: `${process.env.APP_URL || ""}/`,
         // ITN (server-to-server) must hit the BACKEND, not the frontend.
         notify_url: `${process.env.BACKEND_URL || "https://song-stars-backend.onrender.com"}/api/pay/webhook`,
-        m_payment_id: orderId || "",
+        // PayFast canonical order: buyer details (email) BEFORE transaction details (m_payment_id, amount...).
         email_address: email || "",
+        m_payment_id: orderId || "",
         amount: Number(amount).toFixed(2),
         item_name: `Song Stars - ${qty} track${qty > 1 ? "s" : ""}`,
         custom_int1: String(qty),
@@ -477,6 +478,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
       const sigBase = paramStr + (pass ? `&passphrase=${pfEncode(pass)}` : "");
       const signature = crypto.createHash("md5").update(sigBase).digest("hex");
       const redirectUrl = `${base}?${paramStr}&signature=${signature}`;
+      console.log("payfast paramStr:", paramStr, "| sig:", signature);
       return res.json({ provider: "payfast", redirectUrl, orderId });
     }
 
