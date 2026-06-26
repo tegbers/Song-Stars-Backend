@@ -96,7 +96,7 @@ function buildSongPrompt({ names, about, category, mood, fallback }) {
   const occasion = /birthday/i.test(category || "") ? "It's their birthday. " : "";
   const story = about ? about.replace(/^who\s+/i, "") + ". " : "";
   return `An original, family-friendly ${mood || "happy"} song about ${who}. ${occasion}${story}` +
-         `Make it personal and joyful, and sing ${first}'s name in the chorus.`;
+         `Make it personal and joyful. The song must clearly be about and feature ${first}, working the name in naturally (it does not need to be in every line).`;
 }
 
 /* ============================================================
@@ -125,7 +125,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
 About them: ${about || "a wonderful person"}. ${occ}${feel}
 Rules:
-- Sing the name "${first}" clearly in EVERY chorus, and at least once in a verse. ${pron}
+- The song must clearly be about and feature "${first}". Work the name in naturally and memorably (the chorus or hook is a great spot) so there is no doubt it is their song. It does not need to be in every line. ${pron}
 ${must}- Use these section tags on their own lines: [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus].
 - Catchy, singable chorus. Warm, fun and 100% family-friendly. No explicit content.
 - Keep it concise, about 16 to 24 lines total.
