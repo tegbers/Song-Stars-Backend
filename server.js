@@ -399,7 +399,9 @@ function stripEmoji(s = "") { return s.replace(/[^\w &/-]/g, "").trim(); }
         and credit the buyer's account (the SOURCE OF TRUTH for what
         they own must live server-side, never trust the browser).
    ============================================================ */
-const PAY_PROVIDER = (process.env.PAY_PROVIDER || "demo").toLowerCase();
+// TEMP (friend-testing): forced to demo so the paywall "pays" instantly while the PayFast
+// sandbox passphrase is sorted. To go LIVE, restore: (process.env.PAY_PROVIDER || "demo")
+const PAY_PROVIDER = "demo";
 
 /* PayFast requires an md5 signature of the fields (in order) + your passphrase. */
 function payfastSignature(fields, passphrase) {
