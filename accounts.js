@@ -84,11 +84,90 @@ async function statusFor(userId, fingerprint) {
   };
 }
 
-/* Optional: keep a server-side copy of a finished song. */
-async function recordSong(userId, { title, audioUrl, imageUrl, isFree }) {
+/* ============================================================
+   PERMANENT SONG LIBRARY
+   ------------------------------------------------------------
+   Suno/Apiframe hand us a TEMPORARY CDN link that expires, so a
+   saved track would vanish. The moment a song finishes we pull
+   our OWN copy of the audio + cover into Supabase Storage and
+   store those permanent URLs. After that the track can never
+   disappear: it survives closing the app, new devices, re-login.
+   ============================================================ */
+const SONGS_BUCKET = process.env.SONGS_BUCKET || "songs";
+let _bucketReady = false;
+
+/* Make sure the public storage bucket exists (runs once). */
+async function ensureBucket() {
+  if (_bucketReady) return;
   try {
-    await db().from("songs").insert({ user_id: userId, title: title || null, audio_url: audioUrl || null, image_url: imageUrl || null, is_free: !!isFree });
-  } catch (e) { console.error("recordSong:", e.message); }
+    const { data } = await db().storage.getBucket(SONGS_BUCKET);
+    if (!data) {
+      await db().storage.createBucket(SONGS_BUCKET, { public: true });
+    }
+  } catch (e) {
+    // createBucket throws if it already exists — that's fine.
+    if (!/exist/i.test(e.message || "")) console.error("ensureBucket:", e.message);
+  }
+  _bucketReady = true;
+}
+
+/* Download a remote file and upload it into our bucket. Returns
+   { path, url } of the permanent copy, or null if anything fails
+   (caller then falls back to the original link — never lose a song). */
+async function mirrorToStorage(remoteUrl, destPath, contentType) {
+  if (!remoteUrl) return null;
+  try {
+    await ensureBucket();
+    const resp = await fetch(remoteUrl);
+    if (!resp.ok) throw new Error("download " + resp.status);
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const { error } = await db().storage.from(SONGS_BUCKET).upload(destPath, buf, {
+      contentType: contentType || resp.headers.get("content-type") || "application/octet-stream",
+      upsert: true,
+    });
+    if (error) throw new Error(error.message);
+    const { data } = db().storage.from(SONGS_BUCKET).getPublicUrl(destPath);
+    return { path: destPath, url: data.publicUrl };
+  } catch (e) {
+    console.error("mirrorToStorage:", e.message);
+    return null;
+  }
+}
+
+/* Save a finished song permanently. Mirrors audio + cover into our
+   own storage, then writes the row with the PERMANENT urls. Returns
+   the saved record (with permanent audio_url/image_url) or null. */
+async function recordSong(userId, { title, genre, names, audioUrl, imageUrl, isFree }) {
+  try {
+    const id = require("crypto").randomUUID();
+    const folder = `${userId}/${id}`;
+    const audio = await mirrorToStorage(audioUrl, `${folder}/track.mp3`, "audio/mpeg");
+    const cover = await mirrorToStorage(imageUrl, `${folder}/cover.jpg`, "image/jpeg");
+    const row = {
+      id,
+      user_id: userId,
+      title: title || null,
+      genre: genre || null,
+      names: names || null,
+      audio_url: (audio && audio.url) || audioUrl || null,   // permanent if we got it, else original
+      image_url: (cover && cover.url) || imageUrl || null,
+      audio_path: (audio && audio.path) || null,
+      image_path: (cover && cover.path) || null,
+      is_free: !!isFree,
+    };
+    const { data, error } = await db().from("songs").insert(row).select("id, title, genre, names, audio_url, image_url, is_free, created_at").single();
+    if (error) throw new Error(error.message);
+    return data;
+  } catch (e) { console.error("recordSong:", e.message); return null; }
+}
+
+/* The user's permanent library, newest first. */
+async function listSongs(userId, limit = 200) {
+  const { data, error } = await db().from("songs")
+    .select("id, title, genre, names, audio_url, image_url, is_free, created_at")
+    .eq("user_id", userId).order("created_at", { ascending: false }).limit(limit);
+  if (error) throw new Error("listSongs: " + error.message);
+  return data || [];
 }
 
 /* ---------- Orders (payments credited server-side only) ---------- */
@@ -122,7 +201,7 @@ async function markOrderPaidAndCredit({ checkoutId, orderId }) {
 
 module.exports = {
   accountsEnabled, getUser, requireAuth,
-  claimSong, releaseSong, statusFor, recordSong,
+  claimSong, releaseSong, statusFor, recordSong, listSongs,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
   FREE_SONGS,
 };

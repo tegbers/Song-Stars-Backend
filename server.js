@@ -216,13 +216,24 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
 
     if (!out || !out.audioUrl) throw new Error("No audio returned");
 
-    // success: keep a server-side copy + return the user's fresh balance
-    let status = null;
+    // success: pull a PERMANENT copy into our own storage (so the track can
+    // never vanish when Suno's temporary link expires), then return the
+    // permanent urls + the user's fresh balance.
+    let status = null, savedId = null;
     if (accounts.accountsEnabled() && req.user) {
-      accounts.recordSong(req.user.id, { title, audioUrl: out.audioUrl, imageUrl: out.imageUrl, isFree: mode === "free" });
+      const saved = await accounts.recordSong(req.user.id, {
+        title, genre: mood || genre, names,
+        audioUrl: out.audioUrl, imageUrl: out.imageUrl, isFree: mode === "free",
+      });
+      if (saved) {
+        savedId = saved.id;
+        // hand the app our permanent links, not Suno's expiring ones
+        if (saved.audio_url) out.audioUrl = saved.audio_url;
+        if (saved.image_url) out.imageUrl = saved.image_url;
+      }
       status = await accounts.statusFor(req.user.id, fingerprint);
     }
-    res.json({ ...out, provider: PROVIDER, status });
+    res.json({ ...out, savedId, provider: PROVIDER, status });
   } catch (err) {
     // our failure, not theirs: give the song back
     if (accounts.accountsEnabled() && req.user && (mode === "paid" || mode === "free")) {
@@ -241,6 +252,19 @@ app.get("/api/me", accounts.requireAuth, async (req, res) => {
     const status = await accounts.statusFor(req.user.id, req.query.fingerprint);
     res.json({ accounts: true, email: req.user.email || null, ...status });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* The user's permanent library (My Tracks). Songs live in our own
+   storage, so this works across devices and never returns dead links. */
+app.get("/api/songs", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false, songs: [] });
+  try {
+    const songs = await accounts.listSongs(req.user.id);
+    res.json({ accounts: true, songs });
+  } catch (e) {
+    console.error("/api/songs:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
