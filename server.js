@@ -468,8 +468,15 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         custom_int1: String(qty),
         custom_str1: orderId || "",
       };
-      const signature = payfastSignature(fields, process.env.PAYFAST_PASSPHRASE);
-      const redirectUrl = base + "?" + new URLSearchParams({ ...fields, signature }).toString();
+      // PayFast is strict: the string we SIGN must be byte-identical to the string we SUBMIT.
+      // So drop empty fields from BOTH, in the SAME order, with the SAME encoding.
+      const pfEncode = (v) => encodeURIComponent(String(v).trim()).replace(/%20/g, "+");
+      const entries = Object.entries(fields).filter(([, v]) => v !== "" && v !== undefined && v !== null);
+      const paramStr = entries.map(([k, v]) => `${k}=${pfEncode(v)}`).join("&");
+      const pass = process.env.PAYFAST_PASSPHRASE;
+      const sigBase = paramStr + (pass ? `&passphrase=${pfEncode(pass)}` : "");
+      const signature = crypto.createHash("md5").update(sigBase).digest("hex");
+      const redirectUrl = `${base}?${paramStr}&signature=${signature}`;
       return res.json({ provider: "payfast", redirectUrl, orderId });
     }
 
