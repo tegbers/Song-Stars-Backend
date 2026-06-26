@@ -26,6 +26,7 @@ const accounts = require("./accounts");
 const app = express();
 app.use(cors());                 // lock this to your app's domain before launch
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));  // PayFast ITN posts form-encoded data
 
 const PROVIDER = (process.env.PROVIDER || "demo").toLowerCase();
 const PORT = process.env.PORT || 8787;
@@ -316,8 +317,8 @@ async function viaSelfHost({ prompt, tags, lyrics }) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: lyrics || prompt,
-      tags,
+      prompt: lyrics || prompt,        // lyrics if provided, else let Suno write them
+      tags,                            // genre/style preset
       title: undefined,
       make_instrumental: false,
       wait_audio: false,
@@ -447,6 +448,9 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
     }
 
     if (PAY_PROVIDER === "payfast") {
+      // PayFast redirects to a hosted page built from signed form fields.
+      // Build params, sign with your passphrase, return the redirect URL.
+      // Docs: https://developers.payfast.co.za  (set PAYFAST_* in .env)
       const base = process.env.PAYFAST_SANDBOX === "true"
         ? "https://sandbox.payfast.co.za/eng/process"
         : "https://www.payfast.co.za/eng/process";
@@ -455,7 +459,8 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         merchant_key: process.env.PAYFAST_MERCHANT_KEY,
         return_url: `${process.env.APP_URL || ""}/?order=${orderId || ""}`,
         cancel_url: `${process.env.APP_URL || ""}/`,
-        notify_url: `${process.env.APP_URL || ""}/api/pay/webhook`,
+        // ITN (server-to-server) must hit the BACKEND, not the frontend.
+        notify_url: `${process.env.BACKEND_URL || "https://song-stars-backend.onrender.com"}/api/pay/webhook`,
         m_payment_id: orderId || "",
         email_address: email || "",
         amount: Number(amount).toFixed(2),
@@ -488,6 +493,7 @@ app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
   if (!orderId) return res.status(400).json({ error: "Missing orderId" });
   try {
     if (PAY_PROVIDER === "yoco") {
+      // look up the order's checkout id and verify status with Yoco
       const order = await accounts.findOrder({ orderId, userId: req.user.id });
       if (!order) return res.status(404).json({ error: "Order not found" });
       if (order.status !== "paid" && order.yoco_checkout_id) {
@@ -500,6 +506,14 @@ app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
             await accounts.markOrderPaidAndCredit({ checkoutId: order.yoco_checkout_id });
           }
         }
+      }
+    } else if (PAY_PROVIDER === "payfast") {
+      // PayFast credits via ITN (server-to-server), which can land a second
+      // after the browser returns. Give it a few tries before reporting balance.
+      for (let i = 0; i < 6; i++) {
+        const order = await accounts.findOrder({ orderId, userId: req.user.id });
+        if (order && order.status === "paid") break;
+        await new Promise((r) => setTimeout(r, 1500));
       }
     }
     const status = await accounts.statusFor(req.user.id, req.body.fingerprint);
@@ -514,14 +528,22 @@ app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
 app.post("/api/pay/webhook", async (req, res) => {
   try {
     const body = req.body || {};
-    const payload = body.payload || body.data || body;
-    const checkoutId = payload.id || payload.checkoutId || (payload.metadata && payload.metadata.checkoutId);
-    const metaOrderId = payload.metadata && payload.metadata.orderId;
-    const succeeded = /succeed|complete|paid|success/i.test(String(body.type || payload.status || ""));
-    if (accounts.accountsEnabled() && succeeded && (checkoutId || metaOrderId)) {
-      await accounts.markOrderPaidAndCredit({ checkoutId, orderId: metaOrderId });
+    let checkoutId, orderId, succeeded;
+    if (body.payment_status || body.m_payment_id) {
+      // PayFast ITN (form-encoded). payment_status === "COMPLETE" on success.
+      orderId = body.m_payment_id || body.custom_str1;
+      succeeded = /complete/i.test(String(body.payment_status || ""));
+    } else {
+      // Yoco webhook (JSON).
+      const payload = body.payload || body.data || body;
+      checkoutId = payload.id || payload.checkoutId || (payload.metadata && payload.metadata.checkoutId);
+      orderId = payload.metadata && payload.metadata.orderId;
+      succeeded = /succeed|complete|paid|success/i.test(String(body.type || payload.status || ""));
     }
-    console.log("payment webhook:", PAY_PROVIDER, String(body.type || ""), checkoutId || metaOrderId || "");
+    if (accounts.accountsEnabled() && succeeded && (checkoutId || orderId)) {
+      await accounts.markOrderPaidAndCredit({ checkoutId, orderId });
+    }
+    console.log("payment webhook:", PAY_PROVIDER, succeeded ? "ok" : "ignored", checkoutId || orderId || "");
   } catch (e) {
     console.error("webhook:", e.message);
   }
