@@ -175,6 +175,23 @@ async function recordSong(userId, { title, genre, names, audioUrl, imageUrl, isF
   } catch (e) { console.error("recordSong:", e.message); return null; }
 }
 
+/* Delete one of the user's songs: remove the stored files, then the row.
+   Only ever deletes a row that belongs to this user. Returns true on success. */
+async function deleteSong(userId, songId) {
+  const { data: song, error: selErr } = await db().from("songs")
+    .select("id, user_id, audio_path, image_path").eq("id", songId).maybeSingle();
+  if (selErr) throw new Error("deleteSong: " + selErr.message);
+  if (!song || song.user_id !== userId) return false;     // not theirs, or already gone
+  const paths = [song.audio_path, song.image_path].filter(Boolean);
+  if (paths.length) {
+    try { await db().storage.from(SONGS_BUCKET).remove(paths); }
+    catch (e) { console.error("deleteSong storage:", e.message); }
+  }
+  const { error } = await db().from("songs").delete().eq("id", songId).eq("user_id", userId);
+  if (error) throw new Error("deleteSong: " + error.message);
+  return true;
+}
+
 /* The user's permanent library, newest first. */
 async function listSongs(userId, limit = 200) {
   const { data, error } = await db().from("songs")
@@ -393,7 +410,7 @@ async function getPublicSong(songId) {
 
 module.exports = {
   accountsEnabled, getUser, requireAuth,
-  claimSong, releaseSong, statusFor, recordSong, listSongs,
+  claimSong, releaseSong, statusFor, recordSong, listSongs, deleteSong,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
   claimPassSong, releasePassSong, grantApplePurchase,
   publishSong, toggleHeart, addPlay, reportSong, listCharts, getPublicSong,

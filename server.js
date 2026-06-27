@@ -51,95 +51,83 @@ const DEMO_TRACK = "https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749d484.mp
    songs; one-word tags = bland songs. Keyed by the vibe/genre
    the user picks in the app.
    ============================================================ */
+/* SOUND ONLY. Describe instruments, tempo, groove, arrangement and
+   vocal type — NEVER mood, emotion, theme or "family-friendly". The
+   VIBE the user picks sets the mood; the STORY sets the meaning. This
+   keeps Suno true to the chosen style (Drill stays Drill, Funny stays
+   funny) instead of being forced "wholesome / heartfelt / joyful". */
 const STYLES = {
-  // ---- moods ----
-  funny: "Upbeat comedic children's pop, playful and cheeky, bright major key, bouncy tempo around 120 BPM. Plucky ukulele and acoustic guitar, glockenspiel and xylophone, kazoo, parping tuba, hand claps and finger snaps, jaunty walking bassline, cartoonish brass stabs, the odd silly boing or pop sound effect. Clear, warm, friendly lead vocal with cheerful gang backing vocals doing call-and-response. Big singalong chorus, comedic timing and playful little pauses, light and wholesome, family-friendly, joyful and a touch mischievous. Clean, modern, polished production with loads of energy.",
-  party: "High-energy feel-good dance-pop party anthem, euphoric and celebratory, major key, around 124 BPM, four-on-the-floor kick, punchy claps and snare, bright plucky synths, warm sidechained pads, funky bass, rising risers and build-ups into a huge, joyful chorus. Confident, bright lead vocal with big stacked gang-vocal hooks and crowd 'hey!' chants. Massive singalong chorus, balloons-and-confetti energy, fun and inclusive, wholesome and family-friendly. Crisp, glossy, radio-ready modern production with sparkle and bounce.",
-  emotional: "Heartfelt, tender acoustic ballad, warm and sentimental, gentle and intimate, slow tempo around 70 BPM. Soft felt piano, warm fingerpicked acoustic guitar, swelling cinematic strings, subtle warm pads, light brushed drums arriving in the second half, delicate glockenspiel touches. Close, emotive lead vocal, sincere and gentle, with soft harmonies. Dynamic build from quiet, intimate verses to a soaring, goosebumps chorus, then a tender stripped-back ending. Loving, nostalgic, uplifting, family-friendly. Organic, spacious, high-quality production.",
-  epic: "Cinematic epic anthem, triumphant and powerful, inspiring and heroic, building from intimate to enormous, around 90 BPM. Grand orchestral strings and soaring brass, pounding taiko and big cinematic drums, deep booming hits, choir 'ahhs', anthemic piano, subtle modern hybrid-trailer synths and risers. Strong, confident, uplifting lead vocal with a huge stacked choir on the chorus. Dramatic dynamic build, a lift near the end, goosebumps climax. Adventurous, victorious, larger-than-life yet warm and family-friendly. Polished, wide, blockbuster production.",
-  catchy: "Bright, feel-good radio pop, irresistibly catchy and upbeat, major key, around 110 BPM. Sparkly plucked synths, clean electric guitar, warm bass, snappy programmed drums with claps and tambourine, bouncy piano, cheerful whistling and 'oh-oh-oh' hooks. Friendly, bright lead vocal with layered singalong backing vocals. Strong pre-chorus lift into an instantly memorable, hooky chorus that's easy for kids to sing. Sunny, optimistic, wholesome, family-friendly. Clean, modern, polished commercial production.",
-  bedtime: "Gentle, soothing lullaby, soft and dreamy, calming and warm, very slow tempo around 60 BPM. Delicate music box and soft felt piano, warm pads, gentle fingerpicked nylon guitar, subtle harp glissandos, twinkling celeste, slow soft strings, light shimmering ambience. Quiet, tender, breathy lead vocal, almost a whisper, with airy 'la-la' harmonies and the faintest hum. Minimal, spacious arrangement, no percussion or only the softest heartbeat pulse. Peaceful, safe, loving, sleepy, family-friendly. Warm, intimate, high-quality production.",
-  cool: "Laid-back modern pop with a smooth, confident groove, effortlessly cool and stylish, mid tempo around 95 BPM. Mellow electric piano, muted funky guitar, warm round bassline, crisp drums with rim-clicks and soft claps, tasteful synth touches, subtle vinyl warmth. Relaxed, charismatic lead vocal with smooth backing harmonies. Chilled but catchy, head-nodding, feel-good and breezy, wholesome and family-friendly. Clean, warm, contemporary production with plenty of space and vibe.",
-  "sports anthem": "Stadium sports anthem, triumphant and rowdy in a fun way, chant-along and unstoppable, around 130 BPM, strong stomping four-on-the-floor. Big stomp-stomp-clap drums, distorted power-chord electric guitars, anthemic synth brass, driving bass, crowd chants and 'hey! hey!' gang vocals, whistle and air-horn stabs. Bold, powerful lead vocal with a massive crowd-sized chorus built for chanting. Energetic, victorious, unifying, pump-up energy, wholesome and family-friendly. Punchy, huge, arena-sized production.",
+  // ---- legacy mood keys (no longer selectable; kept sound-only) ----
+  funny: "Comedic pop, bouncy around 120 BPM. Ukulele and acoustic guitar, glockenspiel and xylophone, kazoo, tuba, hand claps and finger snaps, walking bassline, brass stabs, occasional cartoon sound effects. Lead vocal with gang backing vocals doing call-and-response. Clean, modern production.",
+  party: "Dance-pop, around 124 BPM, four-on-the-floor kick, punchy claps and snare, plucky synths, sidechained pads, funky bass, risers and build-ups into the chorus. Lead vocal with stacked gang-vocal hooks and crowd chants. Crisp, glossy, radio-ready production.",
+  emotional: "Acoustic ballad, slow around 70 BPM. Felt piano, fingerpicked acoustic guitar, strings, warm pads, light brushed drums entering in the second half, glockenspiel. Close lead vocal with soft harmonies, building from quiet verses to a fuller chorus. Organic, spacious production.",
+  epic: "Cinematic anthem, around 90 BPM, building from intimate to large. Orchestral strings and brass, taiko and big drums, booming hits, choir 'ahhs', anthemic piano, hybrid-trailer synths and risers. Lead vocal with a stacked choir on the chorus. Polished, wide production.",
+  catchy: "Radio pop, around 110 BPM. Plucked synths, clean electric guitar, warm bass, programmed drums with claps and tambourine, piano, whistling and 'oh-oh-oh' hooks. Lead vocal with layered backing vocals, strong pre-chorus lift into a hooky chorus. Clean, modern production.",
+  bedtime: "Lullaby, very slow around 60 BPM. Music box and felt piano, warm pads, nylon guitar, harp, celeste, slow strings. Quiet breathy lead vocal almost a whisper, airy 'la-la' harmonies. Minimal, spacious, little or no percussion. Warm, intimate production.",
+  cool: "Mid-tempo pop, around 95 BPM. Electric piano, muted funky guitar, round bassline, drums with rim-clicks and soft claps, synth touches, vinyl warmth. Lead vocal with smooth backing harmonies. Clean, warm, contemporary production with space.",
+  "sports anthem": "Stadium anthem, around 130 BPM, stomping four-on-the-floor. Stomp-clap drums, power-chord electric guitars, synth brass, driving bass, crowd chants and gang vocals, whistle and air-horn stabs. Lead vocal with a crowd-sized chorus. Punchy, arena-sized production.",
   // ---- genres ----
-  pop: "Bright, upbeat modern pop, around 112 BPM. Clean electric guitars, warm synths, snappy drums with claps, bouncy piano, a big friendly singalong chorus. Friendly, bright lead vocal with layered backing vocals. Sunny, optimistic, wholesome and family-friendly. Clean, polished, radio-ready production.",
-  rock: "Energetic feel-good pop-rock, anthemic and driving, around 130 BPM. Crunchy power-chord electric guitars, melodic lead-guitar licks, punchy live drums, driving bass, big tom fills. Strong, confident lead vocal with gang-vocal backing shouts. Huge fist-pumping singalong chorus, uplifting and wholesome, family-friendly. Polished modern rock production with warmth and punch.",
-  gospel: "Uplifting modern gospel, joyful and soulful, praise-filled, around 100 BPM. Rich Hammond organ, gospel piano, warm bass, live drums with tambourine, soaring brass. Powerful lead vocal with a big harmonised choir doing call-and-response and warm ad-libs. Building arrangement into a euphoric, hands-in-the-air chorus with a key-change lift near the end. Hopeful, heartfelt, communal, family-friendly. Warm, live, full production.",
-  rb: "Smooth contemporary R&B, warm and soulful, mid-slow tempo around 75 BPM. Lush electric piano, mellow guitar, deep round bass, crisp finger-snaps and soft drums, silky pads, subtle vocal chops. Smooth, expressive lead vocal with rich stacked harmonies and gentle runs. Groovy, intimate, heartfelt and tasteful, wholesome and family-friendly. Clean, warm, modern production with space and vibe.",
-  soul: "Classic feel-good soul, warm and heartfelt, vintage Motown/Stax flavour, around 100 BPM. Punchy horn section, warm electric piano and organ, clean rhythm guitar, melodic bass, live drums with tambourine. Rich, emotive lead vocal with soulful backing singers and call-and-response. Groovy, joyful, uplifting, timeless and wholesome, family-friendly. Warm, analog, live-band production.",
-  "hip hop": "Upbeat, family-friendly hip hop, fun, clean and positive, around 95 BPM. Booming 808 bass, crisp trap hi-hats and snappy snare, a bright melodic synth or piano loop, light vocal chops. Confident, clear, rhythmic flow with catchy chanted hooks and kid-friendly call-and-response. Bouncy, feel-good, encouraging, no explicit content. Clean, modern, polished hip-hop production.",
-  dance: "Electronic dance pop, euphoric festival energy, around 126 BPM, four-on-the-floor kick, punchy claps, bright plucky and saw synths, big risers into a euphoric drop-style chorus. Bright lead vocal with stacked gang-vocal hooks. Joyful, sparkly, hands-in-the-air, wholesome and family-friendly. Crisp, glossy, festival-ready production.",
-  trance: "Uplifting euphoric trance, dreamy and emotional, around 138 BPM. Rolling four-on-the-floor kick, driving offbeat bass, shimmering supersaw leads, lush pads, sparkling arpeggios, a big emotional breakdown then a soaring energetic drop. Airy, ethereal vocal with reverb-soaked hooks. Hopeful, euphoric, cinematic, wholesome and family-friendly. Wide, polished, festival production.",
-  kwaito: "Laid-back South African kwaito, slow grooving house tempo around 100 BPM, deep and bouncy. Warm deep-house bassline, mellow synth stabs, log-drum and percussive shakers, spacious claps, hypnotic loop. Relaxed, chanted call-and-response vocals with cool local swagger. Groovy, feel-good, street-cool yet wholesome and family-friendly. Warm, spacious, authentically South African production.",
-  amapiano: "Smooth South African amapiano, deep and soulful, around 112 BPM. Signature log-drum bassline, airy piano chords, soft shakers, rim-clicks, spacious percussion, gentle vocal chops and atmospheric pads. Relaxed, soulful lead vocal with breezy harmonies and chanted hooks. Groovy, classy, hypnotic, feel-good, wholesome and family-friendly. Warm, spacious, authentic amapiano production with deep low-end.",
-  afrobeats: "Sunny modern afrobeats, smooth and feel-good, around 105 BPM. Bouncy log-drum and percussion, bright marimba and guitar plucks, warm bass, airy pads, light vocal chops. Smooth, melodic lead vocal with breezy gang harmonies and catchy chanted hooks. Groovy, warm, joyful, danceable, wholesome and family-friendly. Clean, spacious, modern Afropop production.",
-  reggae: "Sunny, laid-back reggae, warm and positive, around 75 BPM. Off-beat 'skank' guitar and organ bubble, deep round bass, relaxed one-drop drums, light percussion. Warm, friendly lead vocal with easy harmonies and chanted hooks. Chilled, joyful, feel-good island vibe, wholesome and family-friendly. Warm, organic, spacious production.",
-  disco: "Feel-good 70s disco, glittery and joyful, around 120 BPM. Four-on-the-floor kick, syncopated funky bass, wah rhythm guitar, lush strings, bright brass stabs, shimmering hi-hats, handclaps. Bright, happy lead vocal with stacked disco harmonies. Danceable, retro, euphoric, wholesome and family-friendly. Warm, lively, classic disco production.",
-  country: "Warm, heartfelt acoustic country, homely and storytelling, around 90 BPM. Acoustic guitar, banjo, gentle slide and pedal-steel guitar, fiddle, warm bass, soft brushed drums. Friendly, sincere lead vocal with cosy harmonies. Wholesome, nostalgic, feel-good, family-friendly. Warm, organic, polished country production.",
-  lullaby: "Gentle, soothing lullaby, soft and dreamy, very slow tempo around 60 BPM. Delicate music box and soft felt piano, warm pads, gentle nylon guitar, twinkling celeste, slow soft strings. Quiet, tender, breathy lead vocal almost a whisper, with airy 'la-la' harmonies. Minimal, spacious, no percussion or the softest pulse. Peaceful, safe, loving, sleepy, family-friendly. Warm, intimate production.",
+  pop: "Modern pop, around 112 BPM. Clean electric guitars, synths, snappy drums with claps, piano, layered backing vocals on the chorus. Lead vocal. Clean, polished, radio-ready production.",
+  rock: "Pop-rock, driving, around 130 BPM. Power-chord electric guitars, melodic lead-guitar licks, live drums, driving bass, tom fills. Lead vocal with gang-vocal backing shouts on the chorus. Polished modern rock production.",
+  gospel: "Gospel, around 100 BPM. Hammond organ, gospel piano, warm bass, live drums with tambourine, brass. Lead vocal with a harmonised choir doing call-and-response and ad-libs, key-change lift near the end. Warm, live, full production.",
+  rb: "Contemporary R&B, mid-slow around 75 BPM. Electric piano, mellow guitar, deep round bass, finger-snaps and soft drums, pads, vocal chops. Smooth lead vocal with stacked harmonies and runs. Clean, warm, modern production with space.",
+  soul: "Classic soul, vintage Motown/Stax flavour, around 100 BPM. Horn section, electric piano and organ, rhythm guitar, melodic bass, live drums with tambourine. Lead vocal with backing singers and call-and-response. Warm, analog, live-band production.",
+  "hip hop": "Hip hop, around 95 BPM. Booming 808 bass, trap hi-hats and snappy snare, melodic synth or piano loop, vocal chops. Rhythmic flow with chanted hooks and call-and-response. Clean, modern, polished hip-hop production.",
+  dance: "Electronic dance pop, around 126 BPM, four-on-the-floor kick, punchy claps, plucky and saw synths, risers into a drop-style chorus. Lead vocal with stacked gang-vocal hooks. Crisp, glossy, festival-ready production.",
+  trance: "Trance, around 138 BPM. Rolling four-on-the-floor kick, driving offbeat bass, supersaw leads, lush pads, sparkling arpeggios, a breakdown then an energetic drop. Airy reverb-soaked vocal hooks. Wide, polished, festival production.",
+  kwaito: "South African kwaito, slow grooving house tempo around 100 BPM. Deep house bassline, synth stabs, log-drum and percussive shakers, spacious claps, hypnotic loop. Chanted call-and-response vocals. Warm, spacious, authentically South African production.",
+  amapiano: "South African amapiano, around 112 BPM. Log-drum bassline, airy piano chords, soft shakers, rim-clicks, spacious percussion, vocal chops, atmospheric pads. Lead vocal with breezy harmonies and chanted hooks. Warm, spacious production with deep low-end.",
+  afrobeats: "Modern afrobeats, around 105 BPM. Log-drum and percussion, marimba and guitar plucks, warm bass, airy pads, vocal chops. Melodic lead vocal with gang harmonies and chanted hooks. Clean, spacious, modern Afropop production.",
+  reggae: "Reggae, around 75 BPM. Off-beat 'skank' guitar and organ bubble, deep round bass, one-drop drums, percussion. Lead vocal with harmonies and chanted hooks. Warm, organic, spacious production.",
+  disco: "70s disco, around 120 BPM. Four-on-the-floor kick, syncopated funky bass, wah rhythm guitar, strings, brass stabs, shimmering hi-hats, handclaps. Lead vocal with stacked disco harmonies. Warm, lively, classic disco production.",
+  country: "Acoustic country, around 90 BPM. Acoustic guitar, banjo, slide and pedal-steel guitar, fiddle, warm bass, brushed drums. Lead vocal with close harmonies. Warm, organic, polished country production.",
+  lullaby: "Lullaby, very slow around 60 BPM. Music box and felt piano, warm pads, nylon guitar, celeste, slow strings. Quiet breathy lead vocal almost a whisper, airy 'la-la' harmonies. Minimal, spacious, little or no percussion. Warm, intimate production.",
+  // ---- fun & cinematic ----
+  "80s cartoon": "80s Saturday-morning cartoon theme, around 130 BPM. Bright synth brass, arpeggiated synths, gated-reverb drums, slap bass, electric-guitar stabs. Lead vocal with a big anthemic gang-vocal chorus. Punchy retro-80s production.",
+  telenovela: "Latin telenovela theme, around 100 BPM. Sweeping strings, Spanish nylon guitar, piano, accordion and bandoneon, soft Latin percussion. Expressive lead vocal with lush strings. Cinematic, lush production.",
+  "action movie": "Action-movie score, around 120 BPM. Hybrid orchestra, driving percussion and taiko, brass blasts, distorted synth bass, electric guitar, risers and braams. Strong lead vocal over the score. Big, wide cinematic production.",
+  "80s movie theme": "80s movie-theme anthem, around 118 BPM. Gated-reverb drums, bright synths, sax solo, electric guitar, big reverb. Anthemic lead vocal with stacked backing on the chorus. Wide, retro-80s production.",
+  "video game": "Video-game theme, chiptune-meets-orchestra, around 140 BPM. Square-wave and saw synth leads, arpeggios, chiptune bleeps, driving synth bass, energetic electronic drums, occasional orchestral hits. Lead vocal with catchy synth hooks. Punchy, bright, game-soundtrack production.",
+  "national anthem": "Stately national anthem, slow-to-mid around 80 BPM. Full orchestra, swelling strings, French horns and trumpets, timpani rolls, choir. Proud lead vocal with a grand harmonised choir on the chorus. Wide, ceremonial, orchestral production.",
 };
-function normStyle(s) { return (s || "").replace(/[^a-z ]/gi, "").trim().toLowerCase(); }
-function styleFor(s) { return STYLES[normStyle(s)] || (normStyle(s) + " song").trim() || "feel-good pop"; }
+function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
+function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
 
-/* optional Vibe modifier, layered onto the genre style for Suno.
-   Rich descriptor phrases — these steer the MUSIC (mood, dynamics,
-   energy). Keyed by the normalised vibe (lowercase, no hyphens). */
+/* The Vibe is the ONLY mood we add — a short tag matching exactly what
+   the user picked, nothing extra layered on. Keyed by normalised vibe. */
 const VIBE_MOD = {
-  heartfelt: "with a heartfelt, tender and sincere emotional tone, warm and loving, gentle dynamics that swell into a goosebumps chorus",
-  funny: "playful, comedic and cheeky, silly and giggly, light-hearted with big fun singalong energy",
-  feelgood: "bright, sunny and feel-good, joyful and uplifting, irresistibly upbeat and positive",
-  happy: "happy, cheerful and sunny, bouncy and bright, full of smiles and major-key joy",
-  emotional: "deeply emotional and moving, tender and sentimental, intimate verses building to a soaring, tear-jerking chorus",
-  cool: "laid-back, smooth and effortlessly cool, confident groove, stylish and breezy",
-  chill: "relaxed, mellow and chilled-out, easy-going and soothing, gentle laid-back groove",
-  magical: "magical and dreamy, sparkling and whimsical, twinkling fairy-tale wonder, shimmering enchanted atmosphere",
-  epic: "epic, cinematic and triumphant, big and powerful, building to a huge goosebumps climax",
-  "road trip": "windows-down road-trip energy, driving and carefree, anthemic singalong, sunny open-highway feel",
-  party: "high-energy party celebration, euphoric and danceable, confetti-and-balloons fun, big crowd singalong",
-  silly: "super silly and goofy, wacky and giggly, cartoonish fun with cheeky humour and playful sound effects",
-  hopeful: "hopeful and uplifting, optimistic and inspiring, warm rising energy, encouraging and bright",
-  romantic: "romantic and loving, warm and affectionate, tender heartfelt devotion, sweet and dreamy",
-  bedtime: "gentle, soft and sleepy, soothing lullaby calm, dreamy and peaceful, whisper-soft and warm",
-  // legacy keys (kept so older clients still resolve)
-  sweet: "sweet, warm and tender", chilled: "laid-back and chilled", sporty: "high-energy, chant-along, pumped up",
+  heartfelt: "heartfelt", funny: "funny and playful", feelgood: "feel-good", happy: "happy and upbeat",
+  emotional: "emotional", cool: "cool and laid-back", chill: "chilled and mellow", magical: "magical and dreamy",
+  epic: "epic and cinematic", "road trip": "driving road-trip energy", party: "party energy",
+  silly: "silly and goofy", hopeful: "hopeful and uplifting", romantic: "romantic", bedtime: "soft and sleepy",
+  // legacy keys
+  sweet: "sweet and tender", chilled: "chilled and mellow", sporty: "high-energy and chant-along",
 };
 function vibeTag(v) { const k = normStyle(v); if (k === "surprise me") return ""; return VIBE_MOD[k] ? (", " + VIBE_MOD[k]) : ""; }
 
-/* Vibe → a lyric-writing instruction for the words (ChatGPT/Claude). */
+/* Vibe → a short tone note for the lyrics. Only the chosen vibe, no extra. */
 const VIBE_FEEL = {
-  heartfelt: "Write it heartfelt and sincere — warm, loving words straight from the heart.",
-  funny: "Make it funny and playful — cheeky jokes, silly imagery, lines that make people laugh.",
-  feelgood: "Keep it bright and feel-good — sunny, upbeat and full of positive energy.",
-  happy: "Make it happy and cheerful — smiles, sunshine and pure joy.",
-  emotional: "Make it emotional and moving — tender, sentimental, the kind of words that bring a tear.",
-  cool: "Keep it cool and laid-back — smooth, confident and effortlessly stylish.",
-  chill: "Keep it relaxed and chilled — easy-going, mellow and gentle.",
-  magical: "Make it magical and whimsical — wonder, sparkle and a fairy-tale sense of awe.",
-  epic: "Make it epic and triumphant — big, bold, larger-than-life and inspiring.",
-  "road trip": "Give it carefree road-trip energy — open roads, adventure, windows down.",
-  party: "Make it a party anthem — celebration, dancing and hands-in-the-air fun.",
-  silly: "Make it super silly and goofy — wacky, giggly and gloriously daft.",
-  hopeful: "Make it hopeful and uplifting — optimism, encouragement and brighter days ahead.",
-  romantic: "Make it romantic and loving — affectionate, warm and devoted.",
-  bedtime: "Make it a soft, soothing bedtime song — calm, dreamy, safe and sleepy.",
-  sweet: "Keep it sweet, warm and tender.", chilled: "Keep it relaxed and chilled.", sporty: "Make it a pumped-up, chant-along anthem.",
+  heartfelt: "heartfelt", funny: "funny and playful", feelgood: "feel-good", happy: "happy and upbeat",
+  emotional: "emotional", cool: "cool and laid-back", chill: "relaxed and chilled", magical: "magical and dreamy",
+  epic: "epic", "road trip": "carefree road-trip", party: "party", silly: "silly and goofy",
+  hopeful: "hopeful", romantic: "romantic", bedtime: "soft and sleepy",
+  sweet: "sweet and tender", chilled: "relaxed and chilled", sporty: "pumped-up and chant-along",
 };
-function vibeFeel(v) { const k = normStyle(v); if (!k || k === "surprise me") return ""; return (VIBE_FEEL[k] ? VIBE_FEEL[k] + " " : `Overall feel: ${v}. `); }
+function vibeFeel(v) { const k = normStyle(v); if (!k || k === "surprise me") return ""; return VIBE_FEEL[k] ? `Tone: ${VIBE_FEEL[k]}. ` : `Tone: ${v}. `; }
 
 /* Turn the user's inputs into a vivid, personal Suno prompt. */
 function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, genre2 }) {
   if (!names && !about) return fallback || "";
   const who = names || category || "someone special";
   const first = (names || "").split(/[,&]| and /i)[0].trim() || who;
-  const occasion = /birthday/i.test(category || "") ? "It's their birthday. " : "";
   const story = about ? about.replace(/^who\s+/i, "") + ". " : "";
   const styleLine = bandChoice
-    ? "Let the band choose the musical style that best fits this story and mood. "
+    ? "Let the band choose the musical style that fits this song. "
     : (genre2
-        ? `Make it a ${mood || "happy"} song with noticeable ${genre2} influences (keep it primarily ${mood || "happy"}, not a 50/50 blend). `
-        : `Make it a ${mood || "happy"} song. `);
-  return `An original, family-friendly song about ${who}. ${occasion}${story}${styleLine}` +
-         `Make it personal and joyful. The song must clearly be about and feature ${first}, working the name in naturally (it does not need to be in every line).`;
+        ? `Style: ${mood} with noticeable ${genre2} influences (keep it primarily ${mood}, not a 50/50 blend). `
+        : (mood ? `Style: ${mood}. ` : ""));
+  return `A song about ${who}. ${story}${styleLine}` +
+         `It must clearly be about and feature ${first}, working the name in naturally (it does not need to be in every line).`;
 }
 
 /* ============================================================
@@ -153,11 +141,6 @@ const LYRICS_PROVIDER = (process.env.LYRICS_PROVIDER || "off").toLowerCase();
 
 function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
-  const cat = (category || "").toLowerCase();
-  let occ = "";
-  if (/birthday/.test(cat)) occ = "It's their birthday, make it a celebration. ";
-  else if (/pet/.test(cat)) occ = "It's a fun, loving song about their pet. ";
-  else if (/fam/.test(cat)) occ = "It's about their whole family. ";
   const feel = vibeFeel(vibe);
   const must = (mustHave && String(mustHave).trim())
     ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
@@ -166,11 +149,12 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
     ? `The name is pronounced "${pronounce}" — make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
-About them: ${about || "a wonderful person"}. ${occ}${feel}
+About them: ${about || "a wonderful person"}. ${feel}
 Rules:
 - The song must clearly be about and feature "${first}". Work the name in naturally and memorably (the chorus or hook is a great spot) so there is no doubt it is their song. It does not need to be in every line. ${pron}
+- Let the style and tone above lead — match them, don't fight them.
 ${must}- Use these section tags on their own lines: [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus].
-- Catchy, singable chorus. Warm, fun and 100% family-friendly. No explicit content.
+- Catchy, singable chorus. Keep it clean — no explicit content.
 - Keep it concise, about 16 to 24 lines total.
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
@@ -225,15 +209,16 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection — please slow down a bit." });
 
-  const { title, genre, genre2, bandChoice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
+  const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
   const primary = mood || genre;
   const isBandChoice = !!bandChoice || normStyle(primary) === "bands choice";
   const influenceName = (genre2 && !isBandChoice) ? genre2 : "";
   const primaryStyle = isBandChoice
-    ? "warm, well-produced, family-friendly; the band chooses the most fitting musical style for this song's story, mood and lyrics"
+    ? "the band chooses the most fitting musical style for this song"
     : styleFor(primary);
   const influence = influenceName ? `, with noticeable ${influenceName} influences (keep it primarily ${primary}, not a 50/50 blend)` : "";
-  const tags = primaryStyle + influence + vibeTag(vibe);
+  const voiceTag = voice === "female" ? ", female lead vocal" : voice === "male" ? ", male lead vocal" : "";
+  const tags = primaryStyle + influence + vibeTag(vibe) + voiceTag;
   const lyricGenre = isBandChoice ? "" : (influenceName ? `${primary} with a touch of ${influenceName}` : primary);
   const fullPrompt = buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
   if (!fullPrompt) return res.status(400).json({ error: "Missing prompt" });
@@ -320,6 +305,19 @@ app.get("/api/songs", accounts.requireAuth, async (req, res) => {
     res.json({ accounts: true, songs });
   } catch (e) {
     console.error("/api/songs:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* Delete one of the signed-in user's songs (DB row + stored files). */
+app.delete("/api/songs/:id", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.status(401).json({ error: "sign_in" });
+  try {
+    const ok = await accounts.deleteSong(req.user.id, req.params.id);
+    if (!ok) return res.status(404).json({ error: "not_found" });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("/api/songs delete:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
