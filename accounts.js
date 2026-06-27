@@ -192,6 +192,33 @@ async function deleteSong(userId, songId) {
   return true;
 }
 
+/* Permanently delete a user's account and ALL their data (App Store
+   Guideline 5.1.1(v) — in-app account deletion). Removes stored files,
+   their rows across our tables, then the auth user itself. Best-effort
+   per table so one failure doesn't strand the rest; the auth user is
+   removed last so the account truly disappears. */
+async function deleteAccount(userId) {
+  if (!userId) return false;
+  // 1) Remove this user's stored audio + cover files from storage.
+  try {
+    const { data: songs } = await db().from("songs")
+      .select("audio_path, image_path").eq("user_id", userId);
+    const paths = (songs || []).flatMap(s => [s.audio_path, s.image_path]).filter(Boolean);
+    if (paths.length) { try { await db().storage.from(SONGS_BUCKET).remove(paths); } catch (e) { console.error("deleteAccount storage:", e.message); } }
+  } catch (e) { console.error("deleteAccount songs lookup:", e.message); }
+  // 2) Delete their rows from our tables (best-effort).
+  for (const t of ["songs", "house_bands", "orders", "apple_transactions", "profiles"]) {
+    try { await db().from(t).delete().eq("user_id", userId); }
+    catch (e) { console.error(`deleteAccount ${t}:`, e.message); }
+  }
+  // 3) Delete the auth user itself (this is the part that truly removes the account).
+  try {
+    const { error } = await db().auth.admin.deleteUser(userId);
+    if (error) throw new Error(error.message);
+  } catch (e) { console.error("deleteAccount auth:", e.message); throw new Error("deleteAccount: " + e.message); }
+  return true;
+}
+
 /* The user's permanent library, newest first. */
 async function listSongs(userId, limit = 200) {
   const { data, error } = await db().from("songs")
@@ -496,7 +523,7 @@ async function hitParade() {
 
 module.exports = {
   accountsEnabled, getUser, requireAuth,
-  claimSong, releaseSong, statusFor, recordSong, listSongs, deleteSong,
+  claimSong, releaseSong, statusFor, recordSong, listSongs, deleteSong, deleteAccount,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
   claimPassSong, releasePassSong, grantApplePurchase,
   getHouseBand, setHouseBand, releaseToCharts, recordShare, recordReach,

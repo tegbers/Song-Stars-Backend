@@ -438,6 +438,19 @@ app.delete("/api/songs/:id", accounts.requireAuth, async (req, res) => {
   }
 });
 
+/* Permanently delete the signed-in user's account and all their data
+   (App Store Guideline 5.1.1(v) — in-app account deletion). */
+app.delete("/api/account", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.status(401).json({ error: "sign_in" });
+  try {
+    await accounts.deleteAccount(req.user.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("/api/account delete:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ============================================================
    CHARTS, social/bragging only. Dark until CHARTS_ENABLED=true.
    ============================================================ */
