@@ -46,49 +46,48 @@ function rateOk(ip) {
 const DEMO_TRACK = "https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749d484.mp3";
 
 /* ============================================================
-   STYLE PRESETS  — the secret to good songs.
-   Edit these to tune how each vibe sounds. Rich tags = great
-   songs; one-word tags = bland songs. Keyed by the vibe/genre
-   the user picks in the app.
+   STUDIO RECIPES (the MUSIC channel) — see SONGWRITING-ENGINE.md.
+   Sound, instruments, tempo, arrangement, production. A genre's
+   INTRINSIC character is allowed (disco grooves, lullabies soothe),
+   but the MOOD is set by the Vibe and the STORY by the lyrics — so
+   two songs in the same genre still feel different. The Vibe can
+   override a recipe's default tone (Emotional + Disco leans emotional).
    ============================================================ */
-/* SOUND ONLY. Describe instruments, tempo, groove, arrangement and
-   vocal type — NEVER mood, emotion, theme or "family-friendly". The
-   VIBE the user picks sets the mood; the STORY sets the meaning. This
-   keeps Suno true to the chosen style (Drill stays Drill, Funny stays
-   funny) instead of being forced "wholesome / heartfelt / joyful". */
 const STYLES = {
-  // ---- legacy mood keys (no longer selectable; kept sound-only) ----
-  funny: "Comedic pop, bouncy around 120 BPM. Ukulele and acoustic guitar, glockenspiel and xylophone, kazoo, tuba, hand claps and finger snaps, walking bassline, brass stabs, occasional cartoon sound effects. Lead vocal with gang backing vocals doing call-and-response. Clean, modern production.",
-  party: "Dance-pop, around 124 BPM, four-on-the-floor kick, punchy claps and snare, plucky synths, sidechained pads, funky bass, risers and build-ups into the chorus. Lead vocal with stacked gang-vocal hooks and crowd chants. Crisp, glossy, radio-ready production.",
-  emotional: "Acoustic ballad, slow around 70 BPM. Felt piano, fingerpicked acoustic guitar, strings, warm pads, light brushed drums entering in the second half, glockenspiel. Close lead vocal with soft harmonies, building from quiet verses to a fuller chorus. Organic, spacious production.",
-  epic: "Cinematic anthem, around 90 BPM, building from intimate to large. Orchestral strings and brass, taiko and big drums, booming hits, choir 'ahhs', anthemic piano, hybrid-trailer synths and risers. Lead vocal with a stacked choir on the chorus. Polished, wide production.",
-  catchy: "Radio pop, around 110 BPM. Plucked synths, clean electric guitar, warm bass, programmed drums with claps and tambourine, piano, whistling and 'oh-oh-oh' hooks. Lead vocal with layered backing vocals, strong pre-chorus lift into a hooky chorus. Clean, modern production.",
-  bedtime: "Lullaby, very slow around 60 BPM. Music box and felt piano, warm pads, nylon guitar, harp, celeste, slow strings. Quiet breathy lead vocal almost a whisper, airy 'la-la' harmonies. Minimal, spacious, little or no percussion. Warm, intimate production.",
-  cool: "Mid-tempo pop, around 95 BPM. Electric piano, muted funky guitar, round bassline, drums with rim-clicks and soft claps, synth touches, vinyl warmth. Lead vocal with smooth backing harmonies. Clean, warm, contemporary production with space.",
-  "sports anthem": "Stadium anthem, around 130 BPM, stomping four-on-the-floor. Stomp-clap drums, power-chord electric guitars, synth brass, driving bass, crowd chants and gang vocals, whistle and air-horn stabs. Lead vocal with a crowd-sized chorus. Punchy, arena-sized production.",
-  // ---- genres ----
-  pop: "Modern pop, around 112 BPM. Clean electric guitars, synths, snappy drums with claps, piano, layered backing vocals on the chorus. Lead vocal. Clean, polished, radio-ready production.",
-  rock: "Pop-rock, driving, around 130 BPM. Power-chord electric guitars, melodic lead-guitar licks, live drums, driving bass, tom fills. Lead vocal with gang-vocal backing shouts on the chorus. Polished modern rock production.",
-  gospel: "Gospel, around 100 BPM. Hammond organ, gospel piano, warm bass, live drums with tambourine, brass. Lead vocal with a harmonised choir doing call-and-response and ad-libs, key-change lift near the end. Warm, live, full production.",
-  rb: "Contemporary R&B, mid-slow around 75 BPM. Electric piano, mellow guitar, deep round bass, finger-snaps and soft drums, pads, vocal chops. Smooth lead vocal with stacked harmonies and runs. Clean, warm, modern production with space.",
-  soul: "Classic soul, vintage Motown/Stax flavour, around 100 BPM. Horn section, electric piano and organ, rhythm guitar, melodic bass, live drums with tambourine. Lead vocal with backing singers and call-and-response. Warm, analog, live-band production.",
-  "hip hop": "Hip hop, around 95 BPM. Booming 808 bass, trap hi-hats and snappy snare, melodic synth or piano loop, vocal chops. Rhythmic flow with chanted hooks and call-and-response. Clean, modern, polished hip-hop production.",
-  dance: "Electronic dance pop, around 126 BPM, four-on-the-floor kick, punchy claps, plucky and saw synths, risers into a drop-style chorus. Lead vocal with stacked gang-vocal hooks. Crisp, glossy, festival-ready production.",
-  trance: "Trance, around 138 BPM. Rolling four-on-the-floor kick, driving offbeat bass, supersaw leads, lush pads, sparkling arpeggios, a breakdown then an energetic drop. Airy reverb-soaked vocal hooks. Wide, polished, festival production.",
-  kwaito: "South African kwaito, slow grooving house tempo around 100 BPM. Deep house bassline, synth stabs, log-drum and percussive shakers, spacious claps, hypnotic loop. Chanted call-and-response vocals. Warm, spacious, authentically South African production.",
-  amapiano: "South African amapiano, around 112 BPM. Log-drum bassline, airy piano chords, soft shakers, rim-clicks, spacious percussion, vocal chops, atmospheric pads. Lead vocal with breezy harmonies and chanted hooks. Warm, spacious production with deep low-end.",
-  afrobeats: "Modern afrobeats, around 105 BPM. Log-drum and percussion, marimba and guitar plucks, warm bass, airy pads, vocal chops. Melodic lead vocal with gang harmonies and chanted hooks. Clean, spacious, modern Afropop production.",
-  reggae: "Reggae, around 75 BPM. Off-beat 'skank' guitar and organ bubble, deep round bass, one-drop drums, percussion. Lead vocal with harmonies and chanted hooks. Warm, organic, spacious production.",
-  disco: "70s disco, around 120 BPM. Four-on-the-floor kick, syncopated funky bass, wah rhythm guitar, strings, brass stabs, shimmering hi-hats, handclaps. Lead vocal with stacked disco harmonies. Warm, lively, classic disco production.",
-  country: "Acoustic country, around 90 BPM. Acoustic guitar, banjo, slide and pedal-steel guitar, fiddle, warm bass, brushed drums. Lead vocal with close harmonies. Warm, organic, polished country production.",
-  lullaby: "Lullaby, very slow around 60 BPM. Music box and felt piano, warm pads, nylon guitar, celeste, slow strings. Quiet breathy lead vocal almost a whisper, airy 'la-la' harmonies. Minimal, spacious, little or no percussion. Warm, intimate production.",
-  // ---- fun & cinematic ----
-  "80s cartoon": "80s Saturday-morning cartoon theme, around 130 BPM. Bright synth brass, arpeggiated synths, gated-reverb drums, slap bass, electric-guitar stabs. Lead vocal with a big anthemic gang-vocal chorus. Punchy retro-80s production.",
-  telenovela: "Latin telenovela theme, around 100 BPM. Sweeping strings, Spanish nylon guitar, piano, accordion and bandoneon, soft Latin percussion. Expressive lead vocal with lush strings. Cinematic, lush production.",
-  "action movie": "Action-movie score, around 120 BPM. Hybrid orchestra, driving percussion and taiko, brass blasts, distorted synth bass, electric guitar, risers and braams. Strong lead vocal over the score. Big, wide cinematic production.",
-  "80s movie theme": "80s movie-theme anthem, around 118 BPM. Gated-reverb drums, bright synths, sax solo, electric guitar, big reverb. Anthemic lead vocal with stacked backing on the chorus. Wide, retro-80s production.",
-  "video game": "Video-game theme, chiptune-meets-orchestra, around 140 BPM. Square-wave and saw synth leads, arpeggios, chiptune bleeps, driving synth bass, energetic electronic drums, occasional orchestral hits. Lead vocal with catchy synth hooks. Punchy, bright, game-soundtrack production.",
-  "national anthem": "Stately national anthem, slow-to-mid around 80 BPM. Full orchestra, swelling strings, French horns and trumpets, timpani rolls, choir. Proud lead vocal with a grand harmonised choir on the chorus. Wide, ceremonial, orchestral production.",
+  pop: "Timeless pop around 112 BPM. Bright electric guitars, polished synth layers, piano accents, warm bass, crisp drums, vocal front and centre. Verses build into a big memorable chorus. Polished, radio-ready, hook-driven production.",
+  rock: "Stadium pop-rock around 128 BPM. Powerful rhythm guitars, melodic lead-guitar hooks, punchy live drums, driving bass, occasional piano. Verses build into massive choruses with gang vocals and soaring melodies. Polished, warm, powerful.",
+  country: "Modern country around 90 BPM. Acoustic guitar lead with banjo, fiddle, pedal steel, warm bass, light drums, tasteful piano. Intimate conversational verses into warm choruses with rich harmonies. Authentic, organic, polished.",
+  "hip hop": "Commercial hip hop around 95 BPM. Deep 808 bass, crisp drums, punchy kick, sharp hi-hats, melodic piano or synth motifs. Natural flow into chantable melodic choruses. Clean, modern, vocal-forward production.",
+  rb: "Contemporary R&B around 75 BPM. Warm electric piano, mellow guitar, deep bass, soft drums, finger snaps, lush pads. Expressive lead vocal with stacked harmonies and tasteful runs. Luxurious, spacious, balanced production.",
+  dance: "Dance-pop around 126 BPM. Four-on-the-floor kick, driving bass, bright synths, plucks, crisp percussion, uplifting builds into a euphoric chorus. Confident singalong vocals with stacked harmonies. Bright, glossy production with satisfying drops.",
+  kpop: "World-class K-pop around 120 BPM. Bright synths, punchy drums, polished guitars, deep bass, vocal chops, colourful electronics and exciting transitions. Youthful confident vocals, layered harmonies, chant backing, huge choruses. Premium, globally appealing.",
+  afrobeats: "Afrobeats around 105 BPM. Rich percussion, syncopated shakers, guitar plucks, marimba, warm bass, airy pads, subtle log-drum. Relaxed but irresistible groove. Melodic rhythmic vocals with chant harmonies and call-and-response hooks. Spacious, vibrant, clean low end.",
+  amapiano: "Authentic amapiano around 112 BPM. Log-drum basslines under airy piano chords, spacious percussion, shakers, rim clicks, vocal chops. Everything breathes. Effortless conversational vocals with chant harmonies. Warm, deep, luxurious low end.",
+  classical: "Cinematic orchestral around 80 BPM. Piano, soaring strings, French horns, woodwinds, harp, subtle percussion, building to sweeping moments then back to intimate passages. Elegant sincere vocals with lush harmonies and subtle choir. Timeless, cinematic.",
+  lullaby: "Lullaby around 60 BPM. Felt piano, music box, nylon guitar, celeste, soft strings, warm pads. Simple comforting singable melody. Warm reassuring intimate vocal. Delicate, spacious, little or no percussion.",
+  indie: "Indie-pop around 105 BPM. Jangly electric guitars, warm bass, live drums, subtle synths, piano, handclaps. Effortlessly cool, melodic; choruses never over-produced. Natural, slightly imperfect vocals with understated harmonies. Intimate yet polished.",
+  house: "Vocal house around 124 BPM. Four-on-the-floor kick, deep bassline, piano stabs, warm synth chords, percussion, filtered builds. Patient build into vocal choruses. Soulful uplifting vocals with layered hooks. Warm, clean, timeless.",
+  lofi: "Lo-fi around 80 BPM. Dusty drums, mellow electric piano, muted guitar, vinyl texture, warm bass, tape ambience. Spacious and understated, melody and vocal front. Gentle conversational vocals with subtle harmonies. Warm, textured, clear.",
+  reggae: "Reggae around 75 BPM. Off-beat skank guitar, organ bubble, deep bass, one-drop drums, percussion, warm keys. Easy-going melodic vocals with natural harmonies and call-and-response. Warm, spacious, organic.",
+  latin: "Latin pop around 100 BPM. Spanish guitar, piano, congas, bongos, timbales, claps, warm bass, brass and accordion accents. Singable choruses, rhythmic verses. Passionate confident vocals with layered harmonies. Colourful, polished, international.",
+  folk: "Acoustic folk around 85 BPM. Fingerpicked guitar lead with mandolin, upright bass, soft percussion, light strings, occasional banjo. Intimate, honest, memorable; verses into singable choruses. Natural sincere vocals with subtle harmonies. Organic, handcrafted.",
+  gospel: "Modern gospel around 100 BPM. Gospel piano, Hammond organ, live drums, warm bass, tambourine, brass, handclaps. Passionate vocals with a full choir, call-and-response and ad-libs, building to a powerful finale with optional key change. Rich, vibrant, polished.",
+  jazz: "Vocal jazz around 90 BPM. Upright bass, brushed drums, warm piano, soft brass, clean guitar, tasteful sax. Relaxed expressive conversational vocals with elegant phrasing and subtle improvisation serving the melody. Intimate, warm, club-quality.",
+  blues: "Blues around 80 BPM. Warm electric blues guitar, Hammond organ, piano, deep bass, shuffle drums, occasional harmonica. Authentic full-character vocals with tasteful harmonies and expressive guitar responses. Warm, organic, spacious.",
+  funk: "Funk around 110 BPM. Tight slap bass, syncopated rhythm guitar, punchy drums, clavinet, brass stabs, wah guitar, percussion, handclaps. Playful confident rhythmic vocals with group shouts and call-and-response. Tight, vibrant, locked-in groove.",
+  disco: "Disco around 120 BPM. Four-on-the-floor kick, funky bass, shimmering strings, brass stabs, rhythm guitar, handclaps, sparkling hi-hats, building to huge singalong choruses. Confident glamorous vocals with rich layered harmonies. Warm, polished, alive.",
+  trance: "Vocal trance around 138 BPM. Rolling kicks, offbeat bass, lush pads, soaring supersaw synths, sparkling arpeggios, cinematic risers, building through breakdowns into uplifting drops. Melodic airy vocal hooks. Massive, immersive, dynamic.",
+  drill: "Melodic drill around 140 BPM. Sliding 808 bass, sharp hi-hats, crisp snares, dark piano motifs, orchestral textures, atmospheric layers. Rhythmic flow balanced with melodic hooks, accessible without losing drill energy. Clean, punchy, controlled.",
+  kwaito: "South African kwaito around 100 BPM. House-inspired basslines, synth stabs, rhythmic percussion, spacious claps, subtle log-drum, hypnotic keys. Relaxed rhythmic conversational vocals with chant backing and repeated hooks. Warm, spacious, proudly South African.",
+  "80s cartoon": "80s Saturday-morning cartoon theme around 130 BPM. Bold synth brass, sparkling arpeggiators, slap bass, gated-reverb drums, electric-guitar stabs, playful keys. A huge title-theme chorus. Animated confident vocals with enthusiastic gang vocals and call-and-response. Punchy, colourful, unapologetically 80s.",
+  telenovela: "Telenovela theme around 100 BPM. Sweeping strings, grand piano, Spanish nylon guitar, accordion, bandoneon, warm bass, Latin percussion. Dramatic builds into soaring choruses. Passionate theatrical vocals with lush harmonies. Rich, luxurious, cinematic.",
+  "action movie": "Blockbuster action score around 120 BPM. Massive orchestral percussion, taiko, powerful brass, soaring strings, distorted synth bass, electric guitar, cinematic impacts and constant momentum into explosive choruses. Bold inspiring vocals with dramatic backing and orchestral swells. Enormous, modern, cinematic.",
+  "80s movie theme": "80s movie anthem around 118 BPM. Bright synths, gated-reverb drums, electric guitar, driving bass, shimmering pads, expressive sax solos, building into massive choruses. Powerful heartfelt memorable vocals with rich harmonies. Polished, cinematic, uplifting.",
+  "video game": "Video-game soundtrack around 140 BPM. Chiptune synths, square-wave melodies, energetic electronic drums, driving bass, orchestral hits, bright arpeggios, heroic synth leads, building to a triumphant final chorus. Energetic playful memorable vocals with layered hooks. Bold, polished, full of wonder.",
+  "national anthem": "Ceremonial anthem around 80 BPM. Full symphony orchestra, soaring strings, French horns, powerful trumpets, timpani rolls, majestic choir. Strong uplifting phrases. Noble confident vocals with choir harmonies on the chorus. Timeless, cinematic, moving.",
+  "musical theatre": "Broadway-style musical theatre around 100 BPM. Rich piano, live drums, upright bass, sweeping strings, brass, orchestral flourishes. Expressive verses into show-stopping choruses. Charismatic crystal-clear vocals with ensemble harmonies and theatrical call-and-response. Polished, dynamic, larger than life.",
+  "pirate adventure": "Swashbuckling pirate adventure around 110 BPM. Accordion, fiddle, tin whistle, orchestral strings, booming drums, stomps, claps, brass. Adventurous momentum into huge crew-style choruses. Bold charismatic vocals with rowdy crew chants and rich harmonies. Cinematic, energetic, sea-shanty spirit.",
+  "space adventure": "Epic space adventure around 115 BPM. Cinematic synthesizers, wide orchestral strings, French horns, pulsing arpeggios, electronic drums, deep sub bass, atmospheric pads, building to soaring triumphant choruses. Confident inspiring vocals with celestial harmonies. Vast, immersive, cinematic.",
 };
 function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
@@ -139,9 +138,35 @@ function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, g
    ============================================================ */
 const LYRICS_PROVIDER = (process.env.LYRICS_PROVIDER || "off").toLowerCase();
 
+/* ============================================================
+   SONGWRITING ENGINE (the WORDS channel) — see SONGWRITING-ENGINE.md.
+   The guardrail + a RANDOM songwriter personality are what stop every
+   song sounding the same. Personality is picked per song, never shown.
+   ============================================================ */
+const GLOBAL_GUARDRAIL =
+  "Write like a world-class band creating an original song, not following a formula. Let the story decide the structure: some songs have huge choruses, some stay intimate, some build slowly, some open on the hook. Do not force every song into the same arrangement. Surprise the listener. Vary rhyme schemes, phrasing, structure and pacing. Never write the same song twice. Be brave: if silence says more, leave space; if a line deserves repeating, repeat it, otherwise trust the listener. Prioritise musicality, authenticity and replay value over predictability. Make it feel written specifically for this person and this moment.";
+
+const SONGWRITER_PERSONALITIES = [
+  "THE HITMAKER: Write like an experienced hit songwriter. Prioritise memorable melodies and instantly recognisable hooks. The chorus should feel effortless, not forced. Keep lyrics simple, conversational and easy to remember. Imagine millions happily singing this.",
+  "THE STORYTELLER: Tell a story. Let each verse reveal something new, like a journey rather than a list of facts. Use vivid details from the person's life. Natural and emotionally believable. Storytelling over repetition.",
+  "THE POET: Write beautifully. Use imagery, metaphor and elegant language without being hard to understand. Find unusual but memorable ways to describe ordinary moments. Thoughtful and timeless. Avoid clichés.",
+  "THE ENTERTAINER: Have fun. Surprise the listener with humour, clever observations and playful twists. Keep the energy moving. The humour comes from the story, never random jokes.",
+  "THE DREAMER: Create wonder. Lean into imagination, beautiful melodies and emotional atmosphere. Let the music breathe. Paint pictures with the lyrics. Uplifting and hopeful without being sentimental.",
+  "THE PERFORMER: Write as though performed live for thousands. Build singalong moments, dynamic rises and falls, and emotional payoff. The song should feel alive.",
+  "THE MINIMALIST: Say more with less. Few, well-chosen words, lots of space, a simple repeated hook that hits hard. Trust restraint. Nothing wasted.",
+  "THE ROMANTIC: Write tender, intimate and affectionate. Warm, sincere, close-up emotion. Devoted without being saccharine.",
+  "THE OLD SOUL: Write with timeless, classic phrasing — the warmth of a song that could have been written in any decade. Graceful, melodic, built to last.",
+  "THE REBEL: Write with bold attitude and edge. Punchy lines, confidence, unexpected turns. Cool and a little daring, never mean.",
+];
+function pickPersonality() { return SONGWRITER_PERSONALITIES[Math.floor(Math.random() * SONGWRITER_PERSONALITIES.length)]; }
+
 function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const feel = vibeFeel(vibe);
+  const persona = pickPersonality();
+  const mix = /with a touch of/i.test(genre || "")
+    ? `This blends two styles: keep it about 70% the primary style with subtle influence from the second — cohesive, never switching styles between sections. `
+    : "";
   const must = (mustHave && String(mustHave).trim())
     ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
     : "";
@@ -149,13 +174,21 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
     ? `The name is pronounced "${pronounce}" — make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
-About them: ${about || "a wonderful person"}. ${feel}
+About them: ${about || "a wonderful person"}. ${feel}${mix}
+
+WHO IS WRITING TODAY — write in this voice (do not mention it):
+${persona}
+
+HOW TO WRITE:
+${GLOBAL_GUARDRAIL}
+
 Rules:
-- The song must clearly be about and feature "${first}". Work the name in naturally and memorably (the chorus or hook is a great spot) so there is no doubt it is their song. It does not need to be in every line. ${pron}
-- Let the style and tone above lead — match them, don't fight them.
-${must}- Use these section tags on their own lines: [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus].
-- Catchy, singable chorus. Keep it clean — no explicit content.
-- Keep it concise, about 16 to 24 lines total.
+- The mood is set by the tone above and the genre; let them lead, don't fight them. Match the feeling to this story, not a default.
+- The song must clearly be about and feature "${first}". Work the name in naturally and memorably so there's no doubt it's their song — it does not need to be in every line. ${pron}
+- Use the person's name exactly as spelled; never swap in a nickname; keep one consistent pronunciation throughout; adjust the melody before ever distorting the name; don't over-stress it or force it into awkward rhymes.
+${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]) but let the story decide the structure — not every song needs the same sections.
+- Singable and memorable. Keep it clean — no explicit content.
+- Keep it concise, roughly 16 to 26 lines.
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
 
@@ -171,7 +204,7 @@ async function lyricsOpenAI(brief) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.9, max_tokens: 500,
-      messages: [ { role: "system", content: "You are a hit songwriter who writes fun, warm, catchy, family-friendly song lyrics." },
+      messages: [ { role: "system", content: "You are a world-class songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean lyrics." },
                   { role: "user", content: brief } ] }),
   });
   if (!r.ok) throw new Error("OpenAI " + r.status);
@@ -182,7 +215,7 @@ async function lyricsAnthropic(brief) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 600,
-      system: "You are a hit songwriter who writes fun, warm, catchy, family-friendly song lyrics.",
+      system: "You are a world-class songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean lyrics.",
       messages: [ { role: "user", content: brief } ] }),
   });
   if (!r.ok) throw new Error("Anthropic " + r.status);
