@@ -89,7 +89,7 @@ async function statusFor(userId, fingerprint) {
   if (!monthStart || monthStart < now - 30 * 864e5) monthUsed = 0;
   return {
     paidBalance: prof ? prof.paid_balance : 0,
-    freeRemaining: Math.max(0, FREE_SONGS - Math.max(accUsed, devUsed)),
+    freeRemaining: Math.max(0, FREE_SONGS - accUsed),
     freeSongs: FREE_SONGS,
     passActive,
     passUntil: passActive ? new Date(passUntil).toISOString() : null,
