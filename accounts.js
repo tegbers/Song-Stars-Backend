@@ -344,37 +344,108 @@ async function grantApplePurchase(userId, jws) {
 }
 
 /* ============================================================
-   CHARTS — social, bragging-rights only (no sales). Songs are
-   PRIVATE by default; a creator opts in to "Release to the Charts".
-   Stays dark until CHARTS_ENABLED=true (and public-hosting rights
-   with Suno/Apiframe are confirmed).
+   THE CHARTS — a single-player "chart run", never a marketplace.
+   You "Release My Song"; it debuts on the chart and rises or slips.
+   You climb by SHARING (shares + reach), plus a fixed dash of chance
+   and freshness. NO public streaming — nobody hears anyone else's
+   song; a shared link shows a landing CARD only. Every released song
+   has a position; the Top 40 is just the visible tip.
+   Stays dark until CHARTS_ENABLED=true.
    ============================================================ */
 const CHARTS_ENABLED = process.env.CHARTS_ENABLED === "true";
 
-/* Creator opts a song in/out of the public charts. Must own it,
-   and it must not be flagged "protected" (about a child / real person). */
-async function publishSong(userId, songId, { isPublic, chartTitle }) {
-  const { data: song } = await db().from("songs").select("id, user_id, protected").eq("id", songId).maybeSingle();
+/* ---- House Bands: a public artist name per creator (never their login) ---- */
+async function getHouseBand(userId) {
+  const { data } = await db().from("house_bands").select("name").eq("user_id", userId).maybeSingle();
+  return data ? data.name : null;
+}
+async function setHouseBand(userId, name) {
+  name = (name || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  if (!name) throw new Error("Please give your House Band a name.");
+  const { error } = await db().from("house_bands").upsert({ user_id: userId, name }, { onConflict: "user_id" });
+  if (error) throw new Error(error.message);
+  return name;
+}
+
+/* ---- Release a song to the charts ("Release My Song") ---- */
+async function releaseToCharts(userId, songId, { releaseTitle, category, kind } = {}) {
+  const { data: song } = await db().from("songs")
+    .select("id, user_id, protected, released, title").eq("id", songId).maybeSingle();
   if (!song || song.user_id !== userId) throw new Error("not your song");
-  if (isPublic && song.protected) throw new Error("This song is protected and can't be released to the charts.");
-  const patch = { is_public: !!isPublic };
-  if (isPublic) patch.published_at = new Date().toISOString();
-  if (chartTitle !== undefined) patch.chart_title = chartTitle || null;
+  if (song.protected) throw new Error("This song is protected and can't be released.");
+  const patch = {
+    released: true,
+    release_title: (releaseTitle || song.title || "Untitled").toString().slice(0, 80),
+    category: category || null,
+    kind: kind === "album" ? "album" : "single",
+  };
+  if (!song.released) patch.debuted_at = new Date().toISOString();
   const { error } = await db().from("songs").update(patch).eq("id", songId);
   if (error) throw new Error(error.message);
-  return { id: songId, isPublic: !!isPublic };
+  const pos = await positionOf(songId, patch.kind);
+  return { id: songId, position: pos.position, total: pos.total, kind: patch.kind };
 }
 
-/* Heart a song (toggle). Returns the new heart count. */
-async function toggleHeart(userId, songId) {
-  const { data, error } = await db().rpc("toggle_heart", { p_user: userId, p_song: songId });
+/* ---- Share / reach: the climb levers ---- */
+async function recordShare(songId) { try { await db().rpc("record_share", { p_song: songId }); } catch (e) { console.error("record_share:", e.message); } }
+async function recordReach(songId) { try { await db().rpc("record_reach", { p_song: songId }); } catch (e) { console.error("record_reach:", e.message); } }
+
+/* ---- Scoring (computed on read; no cron needed for v1) ---- */
+function _daysSince(iso) { if (!iso) return 999; return (Date.now() - new Date(iso).getTime()) / 864e5; }
+function scoreOf(s) {
+  const fresh = Math.max(0, 8 - _daysSince(s.debuted_at) * 0.8); // new releases break in, fade over ~10 days
+  const momentum = (s.shares || 0) * 3 + (s.reach || 0);          // sharing is the dominant lever
+  const luck = Number(s.chance_seed || 0) * 4;                    // a fixed dash of chance per song
+  return momentum + luck + fresh;
+}
+async function rankedSongs(kind) {
+  let q = db().from("songs")
+    .select("id, user_id, title, release_title, genre, image_url, shares, reach, chance_seed, debuted_at, peak_position, kind")
+    .eq("released", true);
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q.limit(2000);
   if (error) throw new Error(error.message);
-  return data;
+  const rows = (data || []).map((s) => ({ ...s, _score: scoreOf(s) }));
+  rows.sort((a, b) => b._score - a._score);
+  return rows;
+}
+async function _bandNames(userIds) {
+  const ids = [...new Set(userIds)];
+  const map = {};
+  if (ids.length) {
+    const { data } = await db().from("house_bands").select("user_id, name").in("user_id", ids);
+    (data || []).forEach((b) => { map[b.user_id] = b.name; });
+  }
+  return map;
 }
 
-/* Count a play (only public songs increment). */
-async function addPlay(songId) {
-  try { await db().rpc("add_play", { p_song: songId }); } catch (e) { console.error("add_play:", e.message); }
+/* The Top 40 (or fewer). kind: 'single' | 'album'. */
+async function listCharts(kind = "single", limit = 40) {
+  const rows = await rankedSongs(kind === "album" ? "album" : "single");
+  const top = rows.slice(0, limit);
+  const bands = await _bandNames(top.map((r) => r.user_id));
+  return top.map((s, i) => ({
+    position: i + 1,
+    title: s.release_title || s.title,
+    band: bands[s.user_id] || "A House Band",
+    genre: s.genre, image: s.image_url, shares: s.shares || 0,
+  }));
+}
+
+/* A single song's live position within its chart. */
+async function positionOf(songId, kind) {
+  const rows = await rankedSongs(kind || "single");
+  const idx = rows.findIndex((r) => r.id === songId);
+  return { position: idx >= 0 ? idx + 1 : null, total: rows.length };
+}
+
+/* The creator's own released songs with their live positions. */
+async function myReleases(userId) {
+  const singles = await rankedSongs("single");
+  const albums = await rankedSongs("album");
+  const pick = (rows) => rows.map((r, i) => ({ r, pos: i + 1 })).filter((x) => x.r.user_id === userId);
+  const mk = (x) => ({ id: x.r.id, title: x.r.release_title || x.r.title, position: x.pos, kind: x.r.kind, shares: x.r.shares || 0, image: x.r.image_url });
+  return [...pick(singles).map(mk), ...pick(albums).map(mk)];
 }
 
 /* Report a song for review. */
@@ -382,30 +453,31 @@ async function reportSong(songId, reporterId, reason) {
   await db().from("song_reports").insert({ song_id: songId, reporter_id: reporterId || null, reason: (reason || "").slice(0, 500) });
 }
 
-/* A chart. type: 'top' (hearts) | 'new' (recent) | 'played' (plays). */
-async function listCharts(type = "top", limit = 40) {
-  let q = db().from("songs")
-    .select("id, title, chart_title, genre, image_url, audio_url, hearts, plays, published_at")
-    .eq("is_public", true);
-  if (type === "new") q = q.order("published_at", { ascending: false });
-  else if (type === "played") q = q.order("plays", { ascending: false });
-  else q = q.order("hearts", { ascending: false });
-  const { data, error } = await q.limit(limit);
-  if (error) throw new Error(error.message);
-  // never expose the creator's identity — bragging rights are about the song
-  return (data || []).map((s) => ({
-    id: s.id, title: s.chart_title || s.title, genre: s.genre,
-    image: s.image_url, url: s.audio_url, hearts: s.hearts, plays: s.plays,
-  }));
-}
-
-/* One public song's page data (only if it's published). */
+/* Public landing card for a shared link — NO audio (no public streaming).
+   Viewing one counts as 'reach' (a real climb signal). */
 async function getPublicSong(songId) {
   const { data: s } = await db().from("songs")
-    .select("id, title, chart_title, genre, image_url, audio_url, hearts, plays, is_public")
-    .eq("id", songId).maybeSingle();
-  if (!s || !s.is_public) return null;
-  return { id: s.id, title: s.chart_title || s.title, genre: s.genre, image: s.image_url, url: s.audio_url, hearts: s.hearts, plays: s.plays };
+    .select("id, user_id, title, release_title, genre, image_url, released, kind").eq("id", songId).maybeSingle();
+  if (!s || !s.released) return null;
+  await recordReach(songId);
+  const pos = await positionOf(songId, s.kind);
+  const band = await getHouseBand(s.user_id);
+  return { id: s.id, title: s.release_title || s.title, band: band || "A House Band", genre: s.genre, image: s.image_url, position: pos.position, kind: s.kind };
+}
+
+/* The weekly Hit Parade story (computed on read). */
+async function hitParade() {
+  const rows = await rankedSongs("single");
+  const top = rows.slice(0, 40);
+  const bands = await _bandNames(top.map((r) => r.user_id));
+  const card = (s, i) => (s ? { position: i + 1, title: s.release_title || s.title, band: bands[s.user_id] || "A House Band", image: s.image_url } : null);
+  let highestNew = null;
+  top.forEach((s, i) => { if (_daysSince(s.debuted_at) <= 7 && !highestNew) highestNew = { ...card(s, i) }; });
+  return {
+    numberOne: card(top[0], 0),
+    highestNewEntry: highestNew,
+    topTen: top.slice(0, 10).map((s, i) => card(s, i)),
+  };
 }
 
 module.exports = {
@@ -413,6 +485,7 @@ module.exports = {
   claimSong, releaseSong, statusFor, recordSong, listSongs, deleteSong,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
   claimPassSong, releasePassSong, grantApplePurchase,
-  publishSong, toggleHeart, addPlay, reportSong, listCharts, getPublicSong,
+  getHouseBand, setHouseBand, releaseToCharts, recordShare, recordReach,
+  listCharts, positionOf, myReleases, reportSong, getPublicSong, hitParade,
   IAP_PRODUCTS, PASS_CAP, FREE_SONGS, CHARTS_ENABLED,
 };

@@ -327,42 +327,67 @@ app.delete("/api/songs/:id", accounts.requireAuth, async (req, res) => {
    ============================================================ */
 function chartsOff(res) { return res.status(404).json({ error: "charts_disabled" }); }
 
-/* Public chart listing. type: top | new | played. */
+/* The Top 40. kind: single | album. */
 app.get("/api/charts", async (req, res) => {
   if (!accounts.CHARTS_ENABLED) return chartsOff(res);
   try {
-    const songs = await accounts.listCharts(req.query.type || "top");
-    res.json({ enabled: true, type: req.query.type || "top", songs });
+    const kind = req.query.kind === "album" ? "album" : "single";
+    const songs = await accounts.listCharts(kind);
+    res.json({ enabled: true, kind, songs });
   } catch (e) { console.error("/api/charts:", e.message); res.status(500).json({ error: e.message }); }
 });
 
-/* One public song (shareable page). Counts a play. */
+/* The weekly Hit Parade story. */
+app.get("/api/charts/hit-parade", async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  try { res.json({ enabled: true, parade: await accounts.hitParade() }); }
+  catch (e) { console.error("/api/hit-parade:", e.message); res.status(500).json({ error: e.message }); }
+});
+
+/* The signed-in creator's House Band + their released songs with positions. */
+app.get("/api/charts/me", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  if (!req.user) return res.status(401).json({ error: "sign_in" });
+  try {
+    const [band, releases] = await Promise.all([accounts.getHouseBand(req.user.id), accounts.myReleases(req.user.id)]);
+    res.json({ band, releases });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Name / rename the House Band. */
+app.post("/api/charts/band", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  if (!req.user) return res.status(401).json({ error: "sign_in" });
+  try { res.json({ band: await accounts.setHouseBand(req.user.id, req.body && req.body.name) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* Release My Song -> debuts on the chart. */
+app.post("/api/songs/:id/release", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  if (!req.user) return res.status(401).json({ error: "sign_in" });
+  try {
+    const b = req.body || {};
+    const out = await accounts.releaseToCharts(req.user.id, req.params.id, { releaseTitle: b.title, category: b.category, kind: b.kind });
+    res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* Count a share (the climb lever). */
+app.post("/api/songs/:id/share", async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  try { await accounts.recordShare(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* Public landing card for a shared link (NO audio). Counts as reach. */
 app.get("/api/song/:id", async (req, res) => {
   if (!accounts.CHARTS_ENABLED) return chartsOff(res);
   try {
     const song = await accounts.getPublicSong(req.params.id);
     if (!song) return res.status(404).json({ error: "not_found" });
-    accounts.addPlay(req.params.id);
     res.json({ song });
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-/* Creator opts a song in/out of the charts. */
-app.post("/api/songs/:id/publish", accounts.requireAuth, async (req, res) => {
-  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
-  if (!req.user) return res.status(401).json({ error: "sign in" });
-  try {
-    const out = await accounts.publishSong(req.user.id, req.params.id, { isPublic: !!(req.body && req.body.public), chartTitle: req.body && req.body.title });
-    res.json(out);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-/* Heart a song (toggle). */
-app.post("/api/songs/:id/heart", accounts.requireAuth, async (req, res) => {
-  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
-  if (!req.user) return res.status(401).json({ error: "sign in" });
-  try { res.json({ hearts: await accounts.toggleHeart(req.user.id, req.params.id) }); }
-  catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 /* Report a song for review. */
