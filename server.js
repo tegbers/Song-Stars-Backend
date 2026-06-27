@@ -139,33 +139,106 @@ function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, g
 const LYRICS_PROVIDER = (process.env.LYRICS_PROVIDER || "off").toLowerCase();
 
 /* ============================================================
-   SONGWRITING ENGINE (the WORDS channel) — see SONGWRITING-ENGINE.md.
-   The guardrail + a RANDOM songwriter personality are what stop every
-   song sounding the same. Personality is picked per song, never shown.
+   LYRIC WRITER ENGINE (the WORDS channel) — see SONGWRITING-ENGINE.md.
+   Per song we randomly pick ONE direction from each of six dimensions
+   (shape, chorus, verse, bridge, rhyme, writer's voice). ~300k+ combos,
+   so two songs of the same genre+vibe still feel like different writers.
+   Picks are lightly GUARDED by vibe so we never roll comedy/loud
+   directions onto a soft (bedtime/emotional) song. Directions are
+   seasoning — the story, genre and vibe always win. Never shown to user.
    ============================================================ */
-const GLOBAL_GUARDRAIL =
-  "Write like a world-class band creating an original song, not following a formula. Let the story decide the structure: some songs have huge choruses, some stay intimate, some build slowly, some open on the hook. Do not force every song into the same arrangement. Surprise the listener. Vary rhyme schemes, phrasing, structure and pacing. Never write the same song twice. Be brave: if silence says more, leave space; if a line deserves repeating, repeat it, otherwise trust the listener. Prioritise musicality, authenticity and replay value over predictability. Make it feel written specifically for this person and this moment.";
+const LYRIC_CORE_RULES = "Write like a professional songwriter, not a greeting card. Use the details as real material, not a checklist — turn them into moments, images, jokes, memories and hooks, specific enough the song could only be about this person. Natural, singable language; shorter lines beat long crowded ones. Avoid generic filler ('you light up the room', 'one of a kind', 'so special') unless the story earns it. Don't sound corporate or like a school poem. If funny, the humour comes from the details; if heartfelt, no melodrama; if for a child, imaginative not babyish; if romantic, sincere and specific.";
+const VARIANCE_RULE = "Treat the creative directions below as seasoning, not rigid rules. If any conflicts with the story, genre or vibe, ignore it and follow the story. Vary structure, rhyme and chorus style between songs — two songs with the same genre and vibe should still feel written by different songwriters.";
+const LINE_FLOW = "Keep lines short enough to sing; natural stress; never twist grammar just to rhyme. Important words land on strong beats. Don't cram too many details into one line. Repetition should feel like a hook, not filler — the chorus easier to remember than the verses.";
 
-const SONGWRITER_PERSONALITIES = [
-  "THE HITMAKER: Write like an experienced hit songwriter. Prioritise memorable melodies and instantly recognisable hooks. The chorus should feel effortless, not forced. Keep lyrics simple, conversational and easy to remember. Imagine millions happily singing this.",
-  "THE STORYTELLER: Tell a story. Let each verse reveal something new, like a journey rather than a list of facts. Use vivid details from the person's life. Natural and emotionally believable. Storytelling over repetition.",
-  "THE POET: Write beautifully. Use imagery, metaphor and elegant language without being hard to understand. Find unusual but memorable ways to describe ordinary moments. Thoughtful and timeless. Avoid clichés.",
-  "THE ENTERTAINER: Have fun. Surprise the listener with humour, clever observations and playful twists. Keep the energy moving. The humour comes from the story, never random jokes.",
-  "THE DREAMER: Create wonder. Lean into imagination, beautiful melodies and emotional atmosphere. Let the music breathe. Paint pictures with the lyrics. Uplifting and hopeful without being sentimental.",
-  "THE PERFORMER: Write as though performed live for thousands. Build singalong moments, dynamic rises and falls, and emotional payoff. The song should feel alive.",
-  "THE MINIMALIST: Say more with less. Few, well-chosen words, lots of space, a simple repeated hook that hits hard. Trust restraint. Nothing wasted.",
-  "THE ROMANTIC: Write tender, intimate and affectionate. Warm, sincere, close-up emotion. Devoted without being saccharine.",
-  "THE OLD SOUL: Write with timeless, classic phrasing — the warmth of a song that could have been written in any decade. Graceful, melodic, built to last.",
-  "THE REBEL: Write with bold attitude and edge. Punchy lines, confidence, unexpected turns. Cool and a little daring, never mean.",
+const LYRIC_SHAPES = [
+  {name:'Classic',prompt:'Familiar structure: detail-rich verses, a strong chorus, optional bridge; the last chorus can lift or add a small twist.'},
+  {name:'Story First',prompt:'Unfold like a short story; each verse reveals a new moment; the chorus is the emotional summary.'},
+  {name:'Chorus First',prompt:'Open at or near the hook so the heart lands early; verses add personality and detail after.'},
+  {name:'Slow Build',prompt:'Start small and intimate; let meaning build; save the biggest payoff for later.'},
+  {name:'Playful List',prompt:'A rhythmic, clever list of colourful details (only if the story has them) — musical, never a plain inventory.'},
+  {name:'Anthem',prompt:'Build around a big chantable idea; a chorus a group could sing together; bold, simple, memorable.'},
+  {name:'Lullaby',prompt:'Gentle, simple, reassuring; soft imagery and repeated comforting phrases; few details.'},
+  {name:'Comedy',prompt:'Set up funny observations in the verses; the chorus lands a simple repeatable comic idea; humour from truth.'},
+  {name:'Mini Movie',prompt:'Write like a tiny film — scenes, movement, visual detail you can picture happening.'},
+  {name:'One Big Thought',prompt:'Build the whole song around one strong idea; verses explore different angles of it.'},
 ];
-function pickPersonality() { return SONGWRITER_PERSONALITIES[Math.floor(Math.random() * SONGWRITER_PERSONALITIES.length)]; }
+const CHORUS_TYPES = [
+  {name:'Name Hook',prompt:'Use the name in the hook only if it sings naturally — the emotional centre, not forced.'},
+  {name:'Phrase Hook',prompt:'Build the chorus on a memorable phrase from the story, or a simple original line that sums it up.'},
+  {name:'Call And Response',prompt:'A simple call-and-response chorus if the genre supports it, easy to sing back.'},
+  {name:'Big Statement',prompt:'A bold emotional statement; simple words, strong rhythm, no over-explaining.'},
+  {name:'Tiny Detail Hook',prompt:'Build the chorus on one specific detail, made to feel surprisingly important.'},
+  {name:'Singalong Hook',prompt:'Short repeated lines a family or group can sing together.'},
+  {name:'Quiet Hook',prompt:'Understated and intimate; memorable because it is honest, not loud.'},
+  {name:'Question Hook',prompt:'A simple emotional, funny or memorable question as the hook, if it fits.'},
+  {name:'Catchphrase Hook',prompt:'If the user gave a phrase, joke, nickname or saying, consider making it the hook — only if singable.'},
+];
+const VERSE_TYPES = [
+  {name:'Snapshot',prompt:'Each verse is a small scene — show the person doing something, not just described.'},
+  {name:'Memory',prompt:'Build memory-like verses from the details; lived-in and specific.'},
+  {name:'Character',prompt:'Focus on personality — habits, quirks, favourite things, little behaviours.'},
+  {name:'Journey',prompt:'Move through time, from where they began toward who they are now.'},
+  {name:'Funny Truth',prompt:'Gentle recognisable truths that make people laugh because they ring true.'},
+  {name:'Imaginary World',prompt:'For kids, pets, fantasy or adventure, turn details into a small imaginative world.'},
+  {name:'Everyday Magic',prompt:'Make ordinary details feel meaningful; small moments carry the weight.'},
+  {name:'Direct Address',prompt:"Write straight to the person, using 'you' naturally."},
+];
+const BRIDGE_TYPES = [
+  {name:'Emotional Turn',prompt:'Reveal a deeper feeling not yet said; sincere and concise.'},
+  {name:'Funny Twist',prompt:'A playful surprise or comic twist, only if the song supports it.'},
+  {name:'Quiet Moment',prompt:'Strip back; fewer words, more space.'},
+  {name:'Final Lift',prompt:'Build into the last chorus with new energy or meaning.'},
+  {name:'Perspective Shift',prompt:'Briefly change view — e.g. from describing the person to what they mean to others.'},
+  {name:'No Bridge',prompt:'Skip the bridge; keep the structure simpler if that is stronger.'},
+];
+const RHYME_STYLES = [
+  {name:'Simple Natural',prompt:'Clean natural rhymes; use a near-rhyme rather than anything forced.'},
+  {name:'Conversational',prompt:"Don't over-rhyme; natural speech shaped into melody."},
+  {name:'Playful',prompt:'Fun internal rhymes and wordplay for silly, funny or upbeat songs.'},
+  {name:'Poetic',prompt:'Soft near-rhymes, imagery, elegant phrasing; avoid greeting-card rhymes.'},
+  {name:'Minimal',prompt:'Rhyme sparingly; let honesty and melody carry it.'},
+  {name:'Chant',prompt:'Short rhythmic repeated phrases for chant-style hooks, if the genre supports it.'},
+];
+const LYRIC_PERSONALITIES = [
+  {name:'The Warm Human',prompt:'Warmth, simplicity, emotional honesty — like someone who genuinely cares wrote it.'},
+  {name:'The Witty Friend',prompt:'Charm, humour, clever little observations; affectionate, never mean.'},
+  {name:'The Big Chorus Writer',prompt:'Find the most singable central idea and build around it; instantly memorable.'},
+  {name:'The Detail Collector',prompt:'Use small specific details; make ordinary things feel meaningful.'},
+  {name:'The Story Weaver',prompt:'Connect details into a flowing story with a beginning, middle and landing.'},
+  {name:'The Childlike Dreamer',prompt:'Imagination, wonder and play — great for kids, pets and adventures.'},
+  {name:'The Quiet Poet',prompt:'Gentle imagery, simple beautiful lines; avoid over-explaining.'},
+  {name:'The Crowd Pleaser',prompt:'Instantly enjoyable; phrases people can sing, remember and share.'},
+  {name:'The Family Comedian',prompt:'Find the funny truth; charming and amusing, not silly by accident.'},
+  {name:'The Memory Keeper',prompt:'Write to preserve a moment for years; details that mean more on replay.'},
+  {name:'The Tiny Epic Writer',prompt:'Make a small everyday story feel grand without losing its humanity.'},
+  {name:'The Straight Talker',prompt:'Plain, direct, emotionally clear; let simple truth do the work.'},
+];
+const SOFT_VIBES = ['bedtime','emotional','heartfelt','romantic','chill'];
+const PLAYFUL_NAMES = ['Comedy','Playful List','Funny Twist','Playful','The Family Comedian','The Witty Friend','Funny Truth'];
+const LOUD_NAMES = ['Anthem','Big Statement','Singalong Hook','Call And Response','The Crowd Pleaser'];
+function pickFor(arr, vibe) {
+  const v = (vibe || "").toLowerCase();
+  let pool = arr;
+  if (SOFT_VIBES.includes(v)) pool = pool.filter((x) => !PLAYFUL_NAMES.includes(x.name));
+  if (v === "bedtime" || v === "emotional") pool = pool.filter((x) => !LOUD_NAMES.includes(x.name));
+  if (!pool.length) pool = arr;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function buildLyricDirection(vibe) {
+  return {
+    shape: pickFor(LYRIC_SHAPES, vibe), chorus: pickFor(CHORUS_TYPES, vibe),
+    verse: pickFor(VERSE_TYPES, vibe), bridge: pickFor(BRIDGE_TYPES, vibe),
+    rhyme: pickFor(RHYME_STYLES, vibe), personality: pickFor(LYRIC_PERSONALITIES, vibe),
+  };
+}
 
 function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const feel = vibeFeel(vibe);
-  const persona = pickPersonality();
+  const d = buildLyricDirection(vibe);
   const mix = /with a touch of/i.test(genre || "")
-    ? `This blends two styles: keep it about 70% the primary style with subtle influence from the second — cohesive, never switching styles between sections. `
+    ? `This blends two styles: about 70% the primary with subtle influence from the second — cohesive, never switching styles between sections. `
     : "";
   const must = (mustHave && String(mustHave).trim())
     ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
@@ -176,19 +249,25 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
 About them: ${about || "a wonderful person"}. ${feel}${mix}
 
-WHO IS WRITING TODAY — write in this voice (do not mention it):
-${persona}
-
 HOW TO WRITE:
-${GLOBAL_GUARDRAIL}
+${LYRIC_CORE_RULES}
+${VARIANCE_RULE}
 
-Rules:
-- The mood is set by the tone above and the genre; let them lead, don't fight them. Match the feeling to this story, not a default.
-- The song must clearly be about and feature "${first}". Work the name in naturally and memorably so there's no doubt it's their song — it does not need to be in every line. ${pron}
-- Use the person's name exactly as spelled; never swap in a nickname; keep one consistent pronunciation throughout; adjust the melody before ever distorting the name; don't over-stress it or force it into awkward rhymes.
-${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]) but let the story decide the structure — not every song needs the same sections.
-- Singable and memorable. Keep it clean — no explicit content.
-- Keep it concise, roughly 16 to 26 lines.
+CREATIVE DIRECTION for this song (do not mention it; seasoning, not rules):
+- Shape: ${d.shape.prompt}
+- Chorus: ${d.chorus.prompt}
+- Verse: ${d.verse.prompt}
+- Bridge: ${d.bridge.prompt}
+- Rhyme: ${d.rhyme.prompt}
+- Writer's voice: ${d.personality.prompt}
+- Line flow: ${LINE_FLOW}
+
+RULES:
+- The mood is set by the genre and vibe above — let them lead; match the feeling to this story, not a default.
+- The song must clearly be about and feature "${first}" — work the name in naturally, not necessarily in every line. ${pron}
+- Use the name exactly as spelled; never a nickname; one consistent pronunciation throughout; adjust the melody before distorting the name; don't over-stress it or force awkward rhymes.
+${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]); let the chosen shape decide the structure.
+- Keep it clean — no explicit content. Concise, roughly 16 to 26 lines.
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
 
