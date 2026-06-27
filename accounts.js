@@ -68,19 +68,33 @@ async function releaseSong(userId, fingerprint, mode) {
   } catch (e) { console.error("release_song:", e.message); }
 }
 
-/* What the app shows the user: paid balance + free songs left. */
+/* What the app shows the user: paid balance + free songs + Studio Pass. */
 async function statusFor(userId, fingerprint) {
-  const { data: prof } = await db().from("profiles").select("paid_balance, free_used").eq("user_id", userId).maybeSingle();
+  const { data: prof } = await db().from("profiles")
+    .select("paid_balance, free_used, pass_until, pass_month_used, pass_month_start")
+    .eq("user_id", userId).maybeSingle();
   let devUsed = 0;
   if (fingerprint) {
     const { data: dev } = await db().from("device_usage").select("free_used").eq("fingerprint", String(fingerprint).slice(0, 200)).maybeSingle();
     devUsed = dev ? dev.free_used : 0;
   }
   const accUsed = prof ? prof.free_used : 0;
+  // Studio Pass: active if pass_until is in the future. Monthly fair-use
+  // counter rolls every 30 days, so if the window has lapsed, treat used as 0.
+  const now = Date.now();
+  const passUntil = prof && prof.pass_until ? new Date(prof.pass_until).getTime() : 0;
+  const passActive = passUntil > now;
+  let monthUsed = prof ? (prof.pass_month_used || 0) : 0;
+  const monthStart = prof && prof.pass_month_start ? new Date(prof.pass_month_start).getTime() : 0;
+  if (!monthStart || monthStart < now - 30 * 864e5) monthUsed = 0;
   return {
     paidBalance: prof ? prof.paid_balance : 0,
     freeRemaining: Math.max(0, FREE_SONGS - Math.max(accUsed, devUsed)),
     freeSongs: FREE_SONGS,
+    passActive,
+    passUntil: passActive ? new Date(passUntil).toISOString() : null,
+    passRemaining: passActive ? Math.max(0, PASS_CAP - monthUsed) : 0,
+    passCap: PASS_CAP,
   };
 }
 
@@ -188,20 +202,134 @@ async function findOrder({ orderId, userId }) {
   const { data } = await q.maybeSingle();
   return data || null;
 }
-/* Idempotently mark an order paid and credit its qty to the buyer. */
+/* Idempotently mark an order paid, then grant it: a Studio Pass order
+   (pack_id 'studiopass') adds one pass-month; any other order credits its qty. */
 async function markOrderPaidAndCredit({ checkoutId, orderId }) {
   let q = db().from("orders").select("*");
   q = checkoutId ? q.eq("yoco_checkout_id", checkoutId) : q.eq("id", orderId);
   const { data: order } = await q.maybeSingle();
   if (!order || order.status === "paid") return order || null;
   await db().from("orders").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", order.id);
-  await db().rpc("add_balance", { p_user: order.user_id, p_qty: order.qty });
+  if (order.pack_id === "studiopass") {
+    await db().rpc("extend_pass", { p_user: order.user_id, p_days: 31 });
+  } else {
+    await db().rpc("add_balance", { p_user: order.user_id, p_qty: order.qty });
+  }
   return order;
+}
+
+/* ============================================================
+   STUDIO PASS — entitlement (monthly "up to N songs")
+   ------------------------------------------------------------
+   An active pass lets a user make songs without spending paid
+   credits or free songs, up to a fair-use cap per pass-month.
+   ============================================================ */
+const PASS_CAP = Number(process.env.PASS_MONTHLY_CAP || 30);
+
+/* Try to claim ONE song under an active Studio Pass. 'pass' | 'none'. */
+async function claimPassSong(userId) {
+  const { data, error } = await db().rpc("claim_pass_song", { p_user: userId, p_cap: PASS_CAP });
+  if (error) throw new Error("claim_pass_song: " + error.message);
+  return data; // 'pass' | 'none'
+}
+/* Refund a pass-song if our generation fails. */
+async function releasePassSong(userId) {
+  try { await db().rpc("release_pass_song", { p_user: userId }); }
+  catch (e) { console.error("release_pass_song:", e.message); }
+}
+
+/* ============================================================
+   APPLE IN-APP PURCHASE — verify + grant (server-side only)
+   ------------------------------------------------------------
+   iOS app buys via StoreKit 2 and sends us the signed transaction
+   (a JWS). We decode it (and verify its signature in production),
+   map the productId -> reward, and grant it ONCE (apple_transactions
+   row = replay protection). Credits use add_balance; Studio Pass
+   sets pass_until to Apple's expiry date (Apple owns renewals).
+
+   Product IDs must match what you create in App Store Connect.
+   ============================================================ */
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID || "store.bandinyourhand";
+const APPLE_VERIFY = (process.env.APPLE_VERIFY || "auto"); // 'full' | 'decodeonly' | 'auto'
+
+const IAP_PRODUCTS = {
+  // One-off credit consumables (match the web PACKS: single/three/album)
+  "byh.credit.single": { kind: "credits", qty: 1 },
+  "byh.credit.three":  { kind: "credits", qty: 3 },
+  "byh.credit.album":  { kind: "credits", qty: 7 },
+  // Studio Pass — auto-renewable subscription ("up to N songs/month")
+  "byh.studiopass.monthly": { kind: "pass" },
+};
+// Maps the app's web pack id -> the Apple product id created in App Store Connect.
+const PACK_TO_APPLE = { single: "byh.credit.single", three: "byh.credit.three", album: "byh.credit.album" };
+
+/* Decode the JWS payload (middle segment). No signature check. */
+function decodeJwsPayload(jws) {
+  const parts = String(jws || "").split(".");
+  if (parts.length !== 3) throw new Error("malformed signed transaction");
+  return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+}
+
+/* Verify + decode a StoreKit 2 signed transaction. Uses Apple's official
+   library for full signature verification when it's installed and configured;
+   otherwise falls back to decode-only (fine for sandbox bring-up, NOT for
+   production — set APPLE_VERIFY=full once the lib + root certs are wired). */
+async function verifyAppleJws(jws) {
+  if (APPLE_VERIFY !== "decodeonly") {
+    try {
+      const { SignedDataVerifier, Environment } = require("@apple/app-store-server-library");
+      const fs = require("fs");
+      const certDir = process.env.APPLE_ROOT_CERT_DIR; // folder of Apple root .cer/.pem files
+      if (certDir) {
+        const roots = fs.readdirSync(certDir).map((f) => fs.readFileSync(require("path").join(certDir, f)));
+        const env = (process.env.APPLE_ENVIRONMENT === "production") ? Environment.PRODUCTION : Environment.SANDBOX;
+        const appAppleId = Number(process.env.APPLE_APP_APPLE_ID || 6784852955);
+        const verifier = new SignedDataVerifier(roots, true, env, APPLE_BUNDLE_ID, appAppleId);
+        const payload = await verifier.verifyAndDecodeTransaction(jws);
+        return { payload, verified: true };
+      }
+    } catch (e) {
+      if (APPLE_VERIFY === "full") throw new Error("apple verify failed: " + e.message);
+      console.warn("apple full-verify unavailable, using decode-only:", e.message);
+    }
+  }
+  return { payload: decodeJwsPayload(jws), verified: false };
+}
+
+/* Verify an Apple purchase and grant it. Idempotent on transactionId. */
+async function grantApplePurchase(userId, jws) {
+  const { payload, verified } = await verifyAppleJws(jws);
+  if (payload.bundleId && payload.bundleId !== APPLE_BUNDLE_ID) throw new Error("bundle id mismatch");
+  const txId = String(payload.transactionId);
+  const productId = payload.productId;
+  const prod = IAP_PRODUCTS[productId];
+  if (!prod) throw new Error("unknown product: " + productId);
+
+  // already granted? -> idempotent no-op (StoreKit may re-deliver)
+  const { data: existing } = await db().from("apple_transactions")
+    .select("transaction_id").eq("transaction_id", txId).maybeSingle();
+  if (existing) return { ok: true, alreadyGranted: true, kind: prod.kind, productId };
+
+  const expiresIso = payload.expiresDate ? new Date(Number(payload.expiresDate)).toISOString() : null;
+  if (prod.kind === "credits") {
+    await db().rpc("add_balance", { p_user: userId, p_qty: prod.qty });
+  } else if (prod.kind === "pass") {
+    const until = expiresIso || new Date(Date.now() + 31 * 864e5).toISOString();
+    await db().rpc("set_pass_until", { p_user: userId, p_until: until });
+  }
+  await db().from("apple_transactions").insert({
+    transaction_id: txId,
+    original_transaction_id: payload.originalTransactionId ? String(payload.originalTransactionId) : null,
+    user_id: userId, product_id: productId, kind: prod.kind, qty: prod.qty || 0,
+    expires_at: expiresIso,
+  });
+  return { ok: true, kind: prod.kind, productId, verified };
 }
 
 module.exports = {
   accountsEnabled, getUser, requireAuth,
   claimSong, releaseSong, statusFor, recordSong, listSongs,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
-  FREE_SONGS,
+  claimPassSong, releasePassSong, grantApplePurchase,
+  IAP_PRODUCTS, PASS_CAP, FREE_SONGS,
 };

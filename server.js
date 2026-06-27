@@ -192,13 +192,16 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   let mode = "open";
   if (accounts.accountsEnabled() && req.user) {
     try {
-      mode = await accounts.claimSong(req.user.id, fingerprint);
+      // Studio Pass first (free-to-make under the monthly cap), then a paid
+      // credit or a free song. 'none' from both => must pay.
+      mode = await accounts.claimPassSong(req.user.id);            // 'pass' | 'none'
+      if (mode === "none") mode = await accounts.claimSong(req.user.id, fingerprint); // 'paid' | 'free' | 'none'
     } catch (e) {
-      console.error("claimSong:", e.message);
+      console.error("claim song:", e.message);
       return res.status(500).json({ error: "Could not check your song balance. Try again." });
     }
     if (mode === "none") {
-      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs — grab a Single or Album to keep making music." });
+      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs — grab a Single, an Album, or a Studio Pass to keep making music." });
     }
   }
 
@@ -236,8 +239,9 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
     res.json({ ...out, savedId, provider: PROVIDER, status });
   } catch (err) {
     // our failure, not theirs: give the song back
-    if (accounts.accountsEnabled() && req.user && (mode === "paid" || mode === "free")) {
-      await accounts.releaseSong(req.user.id, fingerprint, mode);
+    if (accounts.accountsEnabled() && req.user) {
+      if (mode === "pass") await accounts.releasePassSong(req.user.id);
+      else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
     }
     console.error("generate failed:", err.message);
     res.status(502).json({ error: "Generation failed", detail: err.message });
@@ -438,15 +442,18 @@ function payfastSignature(fields, passphrase) {
 }
 
 app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
-  const { packId, amount, qty, email } = req.body || {};
-  if (!amount || !qty) return res.status(400).json({ error: "Missing amount/qty" });
+  const { packId, amount, qty, email, kind } = req.body || {};
+  const isPass = kind === "pass" || packId === "studiopass";
+  const useQty = isPass ? 0 : qty;
+  if (!amount || (!isPass && !useQty)) return res.status(400).json({ error: "Missing amount/qty" });
+  const itemName = isPass ? "Band in Your Hand - Studio Pass (1 month)" : `Band in Your Hand - ${qty} track${qty > 1 ? "s" : ""}`;
 
-  // Record the order server-side FIRST (pending). Songs are only credited
+  // Record the order server-side FIRST (pending). Credits/pass are only granted
   // once payment is confirmed (webhook or /api/pay/confirm) — never from the browser.
   let orderId = null;
   if (accounts.accountsEnabled() && req.user) {
     try {
-      orderId = await accounts.createOrder({ userId: req.user.id, packId, qty, amountCents: Math.round(amount * 100) });
+      orderId = await accounts.createOrder({ userId: req.user.id, packId: isPass ? "studiopass" : packId, qty: useQty, amountCents: Math.round(amount * 100) });
     } catch (e) {
       console.error("createOrder:", e.message);
       return res.status(500).json({ error: "Could not start your order. Try again." });
@@ -493,8 +500,8 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         email_address: process.env.PAYFAST_SANDBOX === "true" ? "theo@melonmobile.co.za" : (email || ""),
         m_payment_id: orderId || "",
         amount: Number(amount).toFixed(2),
-        item_name: `Song Stars - ${qty} track${qty > 1 ? "s" : ""}`,
-        custom_int1: String(qty),
+        item_name: itemName,
+        custom_int1: String(useQty),
         custom_str1: orderId || "",
       };
       // PayFast is strict: the string we SIGN must be byte-identical to the string we SUBMIT.
@@ -558,6 +565,23 @@ app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
   } catch (e) {
     console.error("pay/confirm:", e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+/* APPLE IAP: the iOS app sends the StoreKit 2 signed transaction (JWS)
+   after a successful purchase. We verify + grant server-side (credits or
+   Studio Pass), then return the user's fresh balance/pass. Idempotent. */
+app.post("/api/pay/apple/verify", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false });
+  const { signedTransaction, fingerprint } = req.body || {};
+  if (!signedTransaction) return res.status(400).json({ error: "Missing signedTransaction" });
+  try {
+    const result = await accounts.grantApplePurchase(req.user.id, signedTransaction);
+    const status = await accounts.statusFor(req.user.id, fingerprint);
+    res.json({ accounts: true, granted: result, ...status });
+  } catch (e) {
+    console.error("apple/verify:", e.message);
+    res.status(400).json({ error: "Could not verify that purchase.", detail: e.message });
   }
 });
 
