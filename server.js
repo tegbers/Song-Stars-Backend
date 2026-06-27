@@ -273,6 +273,56 @@ app.get("/api/songs", accounts.requireAuth, async (req, res) => {
   }
 });
 
+/* ============================================================
+   CHARTS — social/bragging only. Dark until CHARTS_ENABLED=true.
+   ============================================================ */
+function chartsOff(res) { return res.status(404).json({ error: "charts_disabled" }); }
+
+/* Public chart listing. type: top | new | played. */
+app.get("/api/charts", async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  try {
+    const songs = await accounts.listCharts(req.query.type || "top");
+    res.json({ enabled: true, type: req.query.type || "top", songs });
+  } catch (e) { console.error("/api/charts:", e.message); res.status(500).json({ error: e.message }); }
+});
+
+/* One public song (shareable page). Counts a play. */
+app.get("/api/song/:id", async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  try {
+    const song = await accounts.getPublicSong(req.params.id);
+    if (!song) return res.status(404).json({ error: "not_found" });
+    accounts.addPlay(req.params.id);
+    res.json({ song });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Creator opts a song in/out of the charts. */
+app.post("/api/songs/:id/publish", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  if (!req.user) return res.status(401).json({ error: "sign in" });
+  try {
+    const out = await accounts.publishSong(req.user.id, req.params.id, { isPublic: !!(req.body && req.body.public), chartTitle: req.body && req.body.title });
+    res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* Heart a song (toggle). */
+app.post("/api/songs/:id/heart", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  if (!req.user) return res.status(401).json({ error: "sign in" });
+  try { res.json({ hearts: await accounts.toggleHeart(req.user.id, req.params.id) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* Report a song for review. */
+app.post("/api/songs/:id/report", accounts.requireAuth, async (req, res) => {
+  if (!accounts.CHARTS_ENABLED) return chartsOff(res);
+  try { await accounts.reportSong(req.params.id, req.user && req.user.id, req.body && req.body.reason); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 /* ---------- DEMO ---------- */
 async function viaDemo() {
   await wait(4000);

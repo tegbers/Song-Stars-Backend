@@ -326,10 +326,76 @@ async function grantApplePurchase(userId, jws) {
   return { ok: true, kind: prod.kind, productId, verified };
 }
 
+/* ============================================================
+   CHARTS — social, bragging-rights only (no sales). Songs are
+   PRIVATE by default; a creator opts in to "Release to the Charts".
+   Stays dark until CHARTS_ENABLED=true (and public-hosting rights
+   with Suno/Apiframe are confirmed).
+   ============================================================ */
+const CHARTS_ENABLED = process.env.CHARTS_ENABLED === "true";
+
+/* Creator opts a song in/out of the public charts. Must own it,
+   and it must not be flagged "protected" (about a child / real person). */
+async function publishSong(userId, songId, { isPublic, chartTitle }) {
+  const { data: song } = await db().from("songs").select("id, user_id, protected").eq("id", songId).maybeSingle();
+  if (!song || song.user_id !== userId) throw new Error("not your song");
+  if (isPublic && song.protected) throw new Error("This song is protected and can't be released to the charts.");
+  const patch = { is_public: !!isPublic };
+  if (isPublic) patch.published_at = new Date().toISOString();
+  if (chartTitle !== undefined) patch.chart_title = chartTitle || null;
+  const { error } = await db().from("songs").update(patch).eq("id", songId);
+  if (error) throw new Error(error.message);
+  return { id: songId, isPublic: !!isPublic };
+}
+
+/* Heart a song (toggle). Returns the new heart count. */
+async function toggleHeart(userId, songId) {
+  const { data, error } = await db().rpc("toggle_heart", { p_user: userId, p_song: songId });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/* Count a play (only public songs increment). */
+async function addPlay(songId) {
+  try { await db().rpc("add_play", { p_song: songId }); } catch (e) { console.error("add_play:", e.message); }
+}
+
+/* Report a song for review. */
+async function reportSong(songId, reporterId, reason) {
+  await db().from("song_reports").insert({ song_id: songId, reporter_id: reporterId || null, reason: (reason || "").slice(0, 500) });
+}
+
+/* A chart. type: 'top' (hearts) | 'new' (recent) | 'played' (plays). */
+async function listCharts(type = "top", limit = 40) {
+  let q = db().from("songs")
+    .select("id, title, chart_title, genre, image_url, audio_url, hearts, plays, published_at")
+    .eq("is_public", true);
+  if (type === "new") q = q.order("published_at", { ascending: false });
+  else if (type === "played") q = q.order("plays", { ascending: false });
+  else q = q.order("hearts", { ascending: false });
+  const { data, error } = await q.limit(limit);
+  if (error) throw new Error(error.message);
+  // never expose the creator's identity — bragging rights are about the song
+  return (data || []).map((s) => ({
+    id: s.id, title: s.chart_title || s.title, genre: s.genre,
+    image: s.image_url, url: s.audio_url, hearts: s.hearts, plays: s.plays,
+  }));
+}
+
+/* One public song's page data (only if it's published). */
+async function getPublicSong(songId) {
+  const { data: s } = await db().from("songs")
+    .select("id, title, chart_title, genre, image_url, audio_url, hearts, plays, is_public")
+    .eq("id", songId).maybeSingle();
+  if (!s || !s.is_public) return null;
+  return { id: s.id, title: s.chart_title || s.title, genre: s.genre, image: s.image_url, url: s.audio_url, hearts: s.hearts, plays: s.plays };
+}
+
 module.exports = {
   accountsEnabled, getUser, requireAuth,
   claimSong, releaseSong, statusFor, recordSong, listSongs,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
   claimPassSong, releasePassSong, grantApplePurchase,
-  IAP_PRODUCTS, PASS_CAP, FREE_SONGS,
+  publishSong, toggleHeart, addPlay, reportSong, listCharts, getPublicSong,
+  IAP_PRODUCTS, PASS_CAP, FREE_SONGS, CHARTS_ENABLED,
 };
