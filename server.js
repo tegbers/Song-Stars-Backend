@@ -1,9 +1,9 @@
 /* ============================================================
-   SONG STARS — backend (the part users never see)
+   SONG STARS, backend (the part users never see)
    ------------------------------------------------------------
    Your app calls THIS server. THIS server talks to Suno and
    returns just an audio URL. Your Suno credentials stay here,
-   on the server — never in the browser.
+   on the server, never in the browser.
 
    Two ways to make real songs, switched by PROVIDER in .env:
 
@@ -32,8 +32,8 @@ const PROVIDER = (process.env.PROVIDER || "demo").toLowerCase();
 const PORT = process.env.PORT || 8787;
 
 /* Interim abuse guard: cap song generations per IP per window (resets on restart).
-   A speed bump that stops runaway drain — incl. the private-browser trick, since
-   those share one IP — until proper per-account server-side limits exist. */
+   A speed bump that stops runaway drain, incl. the private-browser trick, since
+   those share one IP, until proper per-account server-side limits exist. */
 const RATE = new Map();
 const RATE_MAX = Number(process.env.RATE_MAX || 20);
 const RATE_WINDOW_MS = Number(process.env.RATE_WINDOW_MS || 60 * 60 * 1000);
@@ -46,10 +46,10 @@ function rateOk(ip) {
 const DEMO_TRACK = "https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749d484.mp3";
 
 /* ============================================================
-   STUDIO RECIPES (the MUSIC channel) — see SONGWRITING-ENGINE.md.
+   STUDIO RECIPES (the MUSIC channel), see SONGWRITING-ENGINE.md.
    Sound, instruments, tempo, arrangement, production. A genre's
    INTRINSIC character is allowed (disco grooves, lullabies soothe),
-   but the MOOD is set by the Vibe and the STORY by the lyrics — so
+   but the MOOD is set by the Vibe and the STORY by the lyrics, so
    two songs in the same genre still feel different. The Vibe can
    override a recipe's default tone (Emotional + Disco leans emotional).
    ============================================================ */
@@ -92,7 +92,7 @@ const STYLES = {
 function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
 
-/* The Vibe is the ONLY mood we add — a short tag matching exactly what
+/* The Vibe is the ONLY mood we add, a short tag matching exactly what
    the user picked, nothing extra layered on. Keyed by normalised vibe. */
 const VIBE_MOD = {
   heartfelt: "heartfelt", funny: "funny and playful", feelgood: "feel-good", happy: "happy and upbeat",
@@ -130,7 +130,7 @@ function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, g
 }
 
 /* ============================================================
-   LYRICS (optional but recommended) — write the WORDS with a
+   LYRICS (optional but recommended), write the WORDS with a
    separate AI (ChatGPT or Claude), then Suno sings them. This
    guarantees the person's name lands in every chorus and makes
    the lyrics genuinely good instead of generic.
@@ -139,32 +139,32 @@ function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, g
 const LYRICS_PROVIDER = (process.env.LYRICS_PROVIDER || "off").toLowerCase();
 
 /* ============================================================
-   LYRIC WRITER ENGINE (the WORDS channel) — see SONGWRITING-ENGINE.md.
+   LYRIC WRITER ENGINE (the WORDS channel), see SONGWRITING-ENGINE.md.
    Per song we randomly pick ONE direction from each of six dimensions
    (shape, chorus, verse, bridge, rhyme, writer's voice). ~300k+ combos,
    so two songs of the same genre+vibe still feel like different writers.
    Picks are lightly GUARDED by vibe so we never roll comedy/loud
    directions onto a soft (bedtime/emotional) song. Directions are
-   seasoning — the story, genre and vibe always win. Never shown to user.
+   seasoning, the story, genre and vibe always win. Never shown to user.
    ============================================================ */
-const LYRIC_CORE_RULES = "Write like a professional songwriter, not a greeting card. Use the details as real material, not a checklist — turn them into moments, images, jokes, memories and hooks, specific enough the song could only be about this person. Natural, singable language; shorter lines beat long crowded ones. Avoid generic filler ('you light up the room', 'one of a kind', 'so special') unless the story earns it. Don't sound corporate or like a school poem. If funny, the humour comes from the details; if heartfelt, no melodrama; if for a child, imaginative not babyish; if romantic, sincere and specific.";
-const VARIANCE_RULE = "Treat the creative directions below as seasoning, not rigid rules. If any conflicts with the story, genre or vibe, ignore it and follow the story. Vary structure, rhyme and chorus style between songs — two songs with the same genre and vibe should still feel written by different songwriters.";
-const LINE_FLOW = "Keep lines short enough to sing; natural stress; never twist grammar just to rhyme. Important words land on strong beats. Don't cram too many details into one line. Repetition should feel like a hook, not filler — the chorus easier to remember than the verses.";
+const LYRIC_CORE_RULES = "Write like a professional songwriter, not a greeting card. Use the details as real material, not a checklist, turn them into moments, images, jokes, memories and hooks, specific enough the song could only be about this person. Natural, singable language; shorter lines beat long crowded ones. Avoid generic filler ('you light up the room', 'one of a kind', 'so special') unless the story earns it. Don't sound corporate or like a school poem. If funny, the humour comes from the details; if heartfelt, no melodrama; if for a child, imaginative not babyish; if romantic, sincere and specific.";
+const VARIANCE_RULE = "Treat the creative directions below as seasoning, not rigid rules. If any conflicts with the story, genre or vibe, ignore it and follow the story. Vary structure, rhyme and chorus style between songs, two songs with the same genre and vibe should still feel written by different songwriters.";
+const LINE_FLOW = "Keep lines short enough to sing; natural stress; never twist grammar just to rhyme. Important words land on strong beats. Don't cram too many details into one line. Repetition should feel like a hook, not filler, the chorus easier to remember than the verses.";
 
 const LYRIC_SHAPES = [
   {name:'Classic',prompt:'Familiar structure: detail-rich verses, a strong chorus, optional bridge; the last chorus can lift or add a small twist.'},
   {name:'Story First',prompt:'Unfold like a short story; each verse reveals a new moment; the chorus is the emotional summary.'},
   {name:'Chorus First',prompt:'Open at or near the hook so the heart lands early; verses add personality and detail after.'},
   {name:'Slow Build',prompt:'Start small and intimate; let meaning build; save the biggest payoff for later.'},
-  {name:'Playful List',prompt:'A rhythmic, clever list of colourful details (only if the story has them) — musical, never a plain inventory.'},
+  {name:'Playful List',prompt:'A rhythmic, clever list of colourful details (only if the story has them), musical, never a plain inventory.'},
   {name:'Anthem',prompt:'Build around a big chantable idea; a chorus a group could sing together; bold, simple, memorable.'},
   {name:'Lullaby',prompt:'Gentle, simple, reassuring; soft imagery and repeated comforting phrases; few details.'},
   {name:'Comedy',prompt:'Set up funny observations in the verses; the chorus lands a simple repeatable comic idea; humour from truth.'},
-  {name:'Mini Movie',prompt:'Write like a tiny film — scenes, movement, visual detail you can picture happening.'},
+  {name:'Mini Movie',prompt:'Write like a tiny film, scenes, movement, visual detail you can picture happening.'},
   {name:'One Big Thought',prompt:'Build the whole song around one strong idea; verses explore different angles of it.'},
 ];
 const CHORUS_TYPES = [
-  {name:'Name Hook',prompt:'Use the name in the hook only if it sings naturally — the emotional centre, not forced.'},
+  {name:'Name Hook',prompt:'Use the name in the hook only if it sings naturally, the emotional centre, not forced.'},
   {name:'Phrase Hook',prompt:'Build the chorus on a memorable phrase from the story, or a simple original line that sums it up.'},
   {name:'Call And Response',prompt:'A simple call-and-response chorus if the genre supports it, easy to sing back.'},
   {name:'Big Statement',prompt:'A bold emotional statement; simple words, strong rhythm, no over-explaining.'},
@@ -172,12 +172,12 @@ const CHORUS_TYPES = [
   {name:'Singalong Hook',prompt:'Short repeated lines a family or group can sing together.'},
   {name:'Quiet Hook',prompt:'Understated and intimate; memorable because it is honest, not loud.'},
   {name:'Question Hook',prompt:'A simple emotional, funny or memorable question as the hook, if it fits.'},
-  {name:'Catchphrase Hook',prompt:'If the user gave a phrase, joke, nickname or saying, consider making it the hook — only if singable.'},
+  {name:'Catchphrase Hook',prompt:'If the user gave a phrase, joke, nickname or saying, consider making it the hook, only if singable.'},
 ];
 const VERSE_TYPES = [
-  {name:'Snapshot',prompt:'Each verse is a small scene — show the person doing something, not just described.'},
+  {name:'Snapshot',prompt:'Each verse is a small scene, show the person doing something, not just described.'},
   {name:'Memory',prompt:'Build memory-like verses from the details; lived-in and specific.'},
-  {name:'Character',prompt:'Focus on personality — habits, quirks, favourite things, little behaviours.'},
+  {name:'Character',prompt:'Focus on personality, habits, quirks, favourite things, little behaviours.'},
   {name:'Journey',prompt:'Move through time, from where they began toward who they are now.'},
   {name:'Funny Truth',prompt:'Gentle recognisable truths that make people laugh because they ring true.'},
   {name:'Imaginary World',prompt:'For kids, pets, fantasy or adventure, turn details into a small imaginative world.'},
@@ -189,7 +189,7 @@ const BRIDGE_TYPES = [
   {name:'Funny Twist',prompt:'A playful surprise or comic twist, only if the song supports it.'},
   {name:'Quiet Moment',prompt:'Strip back; fewer words, more space.'},
   {name:'Final Lift',prompt:'Build into the last chorus with new energy or meaning.'},
-  {name:'Perspective Shift',prompt:'Briefly change view — e.g. from describing the person to what they mean to others.'},
+  {name:'Perspective Shift',prompt:'Briefly change view, e.g. from describing the person to what they mean to others.'},
   {name:'No Bridge',prompt:'Skip the bridge; keep the structure simpler if that is stronger.'},
 ];
 const RHYME_STYLES = [
@@ -201,12 +201,12 @@ const RHYME_STYLES = [
   {name:'Chant',prompt:'Short rhythmic repeated phrases for chant-style hooks, if the genre supports it.'},
 ];
 const LYRIC_PERSONALITIES = [
-  {name:'The Warm Human',prompt:'Warmth, simplicity, emotional honesty — like someone who genuinely cares wrote it.'},
+  {name:'The Warm Human',prompt:'Warmth, simplicity, emotional honesty, like someone who genuinely cares wrote it.'},
   {name:'The Witty Friend',prompt:'Charm, humour, clever little observations; affectionate, never mean.'},
   {name:'The Big Chorus Writer',prompt:'Find the most singable central idea and build around it; instantly memorable.'},
   {name:'The Detail Collector',prompt:'Use small specific details; make ordinary things feel meaningful.'},
   {name:'The Story Weaver',prompt:'Connect details into a flowing story with a beginning, middle and landing.'},
-  {name:'The Childlike Dreamer',prompt:'Imagination, wonder and play — great for kids, pets and adventures.'},
+  {name:'The Childlike Dreamer',prompt:'Imagination, wonder and play, great for kids, pets and adventures.'},
   {name:'The Quiet Poet',prompt:'Gentle imagery, simple beautiful lines; avoid over-explaining.'},
   {name:'The Crowd Pleaser',prompt:'Instantly enjoyable; phrases people can sing, remember and share.'},
   {name:'The Family Comedian',prompt:'Find the funny truth; charming and amusing, not silly by accident.'},
@@ -238,13 +238,13 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
   const feel = vibeFeel(vibe);
   const d = buildLyricDirection(vibe);
   const mix = /with a touch of/i.test(genre || "")
-    ? `This blends two styles: about 70% the primary with subtle influence from the second — cohesive, never switching styles between sections. `
+    ? `This blends two styles: about 70% the primary with subtle influence from the second, cohesive, never switching styles between sections. `
     : "";
   const must = (mustHave && String(mustHave).trim())
     ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
     : "";
   const pron = pronounce
-    ? `The name is pronounced "${pronounce}" — make sure it is sung exactly that way.`
+    ? `The name is pronounced "${pronounce}", make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
 About them: ${about || "a wonderful person"}. ${feel}${mix}
@@ -263,11 +263,11 @@ CREATIVE DIRECTION for this song (do not mention it; seasoning, not rules):
 - Line flow: ${LINE_FLOW}
 
 RULES:
-- The mood is set by the genre and vibe above — let them lead; match the feeling to this story, not a default.
-- The song must clearly be about and feature "${first}" — work the name in naturally, not necessarily in every line. ${pron}
+- The mood is set by the genre and vibe above, let them lead; match the feeling to this story, not a default.
+- The song must clearly be about and feature "${first}", work the name in naturally, not necessarily in every line. ${pron}
 - Use the name exactly as spelled; never a nickname; one consistent pronunciation throughout; adjust the melody before distorting the name; don't over-stress it or force awkward rhymes.
 ${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]); let the chosen shape decide the structure.
-- Keep it clean — no explicit content. Concise, roughly 16 to 26 lines.
+- Keep it clean, no explicit content. Concise, roughly 16 to 26 lines.
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
 
@@ -319,7 +319,7 @@ async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
    ------------------------------------------------------------ */
 app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
-  if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection — please slow down a bit." });
+  if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection, please slow down a bit." });
 
   const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
   const primary = mood || genre;
@@ -349,7 +349,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
       return res.status(500).json({ error: "Could not check your song balance. Try again." });
     }
     if (mode === "none") {
-      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs — grab a Single, an Album, or a Studio Pass to keep making music." });
+      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs, grab a Single, an Album, or a Studio Pass to keep making music." });
     }
   }
 
@@ -435,7 +435,7 @@ app.delete("/api/songs/:id", accounts.requireAuth, async (req, res) => {
 });
 
 /* ============================================================
-   CHARTS — social/bragging only. Dark until CHARTS_ENABLED=true.
+   CHARTS, social/bragging only. Dark until CHARTS_ENABLED=true.
    ============================================================ */
 function chartsOff(res) { return res.status(404).json({ error: "charts_disabled" }); }
 
@@ -603,7 +603,7 @@ async function viaSelfHost({ prompt, tags, lyrics }) {
 }
 
 /* ---------- THIRD-PARTY PROVIDER ----------
-   Shapes differ per provider — adjust the 3 marked lines to match
+   Shapes differ per provider, adjust the 3 marked lines to match
    the docs of whichever you pick (APIPASS / Sunor / EvoLink / Apiframe).
    Set THIRDPARTY_BASE and THIRDPARTY_KEY in .env
 */
@@ -612,7 +612,7 @@ async function viaThirdParty({ prompt, tags, lyrics, title }) {
   const key = process.env.THIRDPARTY_KEY;
   if (!base || !key) throw new Error("Set THIRDPARTY_BASE and THIRDPARTY_KEY in .env");
 
-  // (1) start the job — check your provider's request body
+  // (1) start the job, check your provider's request body
   const start = await fetch(`${base}/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -627,7 +627,7 @@ async function viaThirdParty({ prompt, tags, lyrics, title }) {
   if (!start.ok) throw new Error("third-party start failed: " + start.status);
   const startData = await start.json();
 
-  // (2) get the job id — field name varies (taskId / id / data.id …)
+  // (2) get the job id, field name varies (taskId / id / data.id …)
   const jobId = startData.taskId || startData.id || startData.data?.id;
   if (jobId === undefined) {
     // some providers return the audio URL immediately
@@ -636,7 +636,7 @@ async function viaThirdParty({ prompt, tags, lyrics, title }) {
     throw new Error("No job id / audio from third-party");
   }
 
-  // (3) poll for completion — check your provider's status route + field
+  // (3) poll for completion, check your provider's status route + field
   const audioUrl = await pollUntil(async () => {
     const r = await fetch(`${base}/status/${jobId}`, { headers: { Authorization: `Bearer ${key}` } });
     const d = await r.json();
@@ -685,7 +685,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
   const itemName = isPass ? "Band in Your Hand - Studio Pass (1 month)" : `Band in Your Hand - ${qty} track${qty > 1 ? "s" : ""}`;
 
   // Record the order server-side FIRST (pending). Credits/pass are only granted
-  // once payment is confirmed (webhook or /api/pay/confirm) — never from the browser.
+  // once payment is confirmed (webhook or /api/pay/confirm), never from the browser.
   let orderId = null;
   if (accounts.accountsEnabled() && req.user) {
     try {
@@ -698,7 +698,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
 
   try {
     if (PAY_PROVIDER === "yoco") {
-      // Yoco Checkout API — amount in cents (ZAR). Docs: https://developer.yoco.com
+      // Yoco Checkout API, amount in cents (ZAR). Docs: https://developer.yoco.com
       const r = await fetch("https://payments.yoco.com/api/checkouts", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.YOCO_SECRET_KEY}` },
@@ -731,7 +731,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         // ITN (server-to-server) must hit the BACKEND, not the frontend.
         notify_url: `${process.env.BACKEND_URL || "https://song-stars-backend.onrender.com"}/api/pay/webhook`,
         // PayFast canonical order: buyer details (email) BEFORE transaction details (m_payment_id, amount...).
-        // In SANDBOX, never send the merchant's own email — PayFast blocks "paying yourself".
+        // In SANDBOX, never send the merchant's own email, PayFast blocks "paying yourself".
         // Use a neutral test buyer so the sandbox Test Merchant page (and full ITN loop) is reachable.
         email_address: process.env.PAYFAST_SANDBOX === "true" ? "theo@melonmobile.co.za" : (email || ""),
         m_payment_id: orderId || "",
@@ -753,7 +753,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
       return res.json({ provider: "payfast", redirectUrl, orderId });
     }
 
-    // demo: no real charge — credit instantly so the flow is testable end-to-end.
+    // demo: no real charge, credit instantly so the flow is testable end-to-end.
     if (accounts.accountsEnabled() && req.user && orderId) {
       await accounts.markOrderPaidAndCredit({ orderId });
     }
@@ -765,7 +765,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
 });
 
 /* After returning from Yoco, the app calls this with its orderId. We ask Yoco
-   whether the checkout actually completed, then credit — so the browser can
+   whether the checkout actually completed, then credit, so the browser can
    never grant itself songs. Idempotent. */
 app.post("/api/pay/confirm", accounts.requireAuth, async (req, res) => {
   if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false });

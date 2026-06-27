@@ -439,13 +439,27 @@ async function positionOf(songId, kind) {
   return { position: idx >= 0 ? idx + 1 : null, total: rows.length };
 }
 
-/* The creator's own released songs with their live positions. */
+/* Achievement badges for a released song, from its live position + shares. */
+function badgesFor(pos, shares) {
+  const b = [];
+  if (pos === 1) b.push("👑 Number One");
+  else if (pos && pos <= 5) b.push("🏆 Top 5");
+  else if (pos && pos <= 10) b.push("🔟 Top 10");
+  else if (pos && pos <= 40) b.push("⭐ Top 40");
+  if ((shares || 0) >= 25) b.push("🔥 On Fire");
+  else if ((shares || 0) >= 5) b.push("📈 Climbing");
+  return b;
+}
+
+/* The creator's own released songs with their live positions + badges. */
 async function myReleases(userId) {
   const singles = await rankedSongs("single");
   const albums = await rankedSongs("album");
   const pick = (rows) => rows.map((r, i) => ({ r, pos: i + 1 })).filter((x) => x.r.user_id === userId);
-  const mk = (x) => ({ id: x.r.id, title: x.r.release_title || x.r.title, position: x.pos, kind: x.r.kind, shares: x.r.shares || 0, image: x.r.image_url });
-  return [...pick(singles).map(mk), ...pick(albums).map(mk)];
+  const mk = (x) => ({ id: x.r.id, title: x.r.release_title || x.r.title, position: x.pos, kind: x.r.kind, shares: x.r.shares || 0, image: x.r.image_url, peak: x.r.peak_position || x.pos, badges: badgesFor(x.pos, x.r.shares) });
+  const list = [...pick(singles).map(mk), ...pick(albums).map(mk)];
+  if (list.length) list[0].badges = ["🎬 First Release", ...list[0].badges].filter((b, i, a) => a.indexOf(b) === i);
+  return list;
 }
 
 /* Report a song for review. */
