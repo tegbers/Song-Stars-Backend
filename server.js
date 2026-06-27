@@ -81,21 +81,64 @@ const STYLES = {
 function normStyle(s) { return (s || "").replace(/[^a-z ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || (normStyle(s) + " song").trim() || "feel-good pop"; }
 
-/* optional Vibe modifier, layered onto the genre style */
+/* optional Vibe modifier, layered onto the genre style for Suno.
+   Rich descriptor phrases — these steer the MUSIC (mood, dynamics,
+   energy). Keyed by the normalised vibe (lowercase, no hyphens). */
 const VIBE_MOD = {
-  funny: "playful, funny and cheeky", sweet: "sweet, warm and tender", epic: "epic, big and triumphant",
-  chilled: "laid-back and chilled", bedtime: "gentle, soft and sleepy", sporty: "high-energy, chant-along, pumped up",
+  heartfelt: "with a heartfelt, tender and sincere emotional tone, warm and loving, gentle dynamics that swell into a goosebumps chorus",
+  funny: "playful, comedic and cheeky, silly and giggly, light-hearted with big fun singalong energy",
+  feelgood: "bright, sunny and feel-good, joyful and uplifting, irresistibly upbeat and positive",
+  happy: "happy, cheerful and sunny, bouncy and bright, full of smiles and major-key joy",
+  emotional: "deeply emotional and moving, tender and sentimental, intimate verses building to a soaring, tear-jerking chorus",
+  cool: "laid-back, smooth and effortlessly cool, confident groove, stylish and breezy",
+  chill: "relaxed, mellow and chilled-out, easy-going and soothing, gentle laid-back groove",
+  magical: "magical and dreamy, sparkling and whimsical, twinkling fairy-tale wonder, shimmering enchanted atmosphere",
+  epic: "epic, cinematic and triumphant, big and powerful, building to a huge goosebumps climax",
+  "road trip": "windows-down road-trip energy, driving and carefree, anthemic singalong, sunny open-highway feel",
+  party: "high-energy party celebration, euphoric and danceable, confetti-and-balloons fun, big crowd singalong",
+  silly: "super silly and goofy, wacky and giggly, cartoonish fun with cheeky humour and playful sound effects",
+  hopeful: "hopeful and uplifting, optimistic and inspiring, warm rising energy, encouraging and bright",
+  romantic: "romantic and loving, warm and affectionate, tender heartfelt devotion, sweet and dreamy",
+  bedtime: "gentle, soft and sleepy, soothing lullaby calm, dreamy and peaceful, whisper-soft and warm",
+  // legacy keys (kept so older clients still resolve)
+  sweet: "sweet, warm and tender", chilled: "laid-back and chilled", sporty: "high-energy, chant-along, pumped up",
 };
-function vibeTag(v) { const k = normStyle(v); return VIBE_MOD[k] ? (", " + VIBE_MOD[k]) : ""; }
+function vibeTag(v) { const k = normStyle(v); if (k === "surprise me") return ""; return VIBE_MOD[k] ? (", " + VIBE_MOD[k]) : ""; }
+
+/* Vibe → a lyric-writing instruction for the words (ChatGPT/Claude). */
+const VIBE_FEEL = {
+  heartfelt: "Write it heartfelt and sincere — warm, loving words straight from the heart.",
+  funny: "Make it funny and playful — cheeky jokes, silly imagery, lines that make people laugh.",
+  feelgood: "Keep it bright and feel-good — sunny, upbeat and full of positive energy.",
+  happy: "Make it happy and cheerful — smiles, sunshine and pure joy.",
+  emotional: "Make it emotional and moving — tender, sentimental, the kind of words that bring a tear.",
+  cool: "Keep it cool and laid-back — smooth, confident and effortlessly stylish.",
+  chill: "Keep it relaxed and chilled — easy-going, mellow and gentle.",
+  magical: "Make it magical and whimsical — wonder, sparkle and a fairy-tale sense of awe.",
+  epic: "Make it epic and triumphant — big, bold, larger-than-life and inspiring.",
+  "road trip": "Give it carefree road-trip energy — open roads, adventure, windows down.",
+  party: "Make it a party anthem — celebration, dancing and hands-in-the-air fun.",
+  silly: "Make it super silly and goofy — wacky, giggly and gloriously daft.",
+  hopeful: "Make it hopeful and uplifting — optimism, encouragement and brighter days ahead.",
+  romantic: "Make it romantic and loving — affectionate, warm and devoted.",
+  bedtime: "Make it a soft, soothing bedtime song — calm, dreamy, safe and sleepy.",
+  sweet: "Keep it sweet, warm and tender.", chilled: "Keep it relaxed and chilled.", sporty: "Make it a pumped-up, chant-along anthem.",
+};
+function vibeFeel(v) { const k = normStyle(v); if (!k || k === "surprise me") return ""; return (VIBE_FEEL[k] ? VIBE_FEEL[k] + " " : `Overall feel: ${v}. `); }
 
 /* Turn the user's inputs into a vivid, personal Suno prompt. */
-function buildSongPrompt({ names, about, category, mood, fallback }) {
+function buildSongPrompt({ names, about, category, mood, fallback, bandChoice, genre2 }) {
   if (!names && !about) return fallback || "";
   const who = names || category || "someone special";
   const first = (names || "").split(/[,&]| and /i)[0].trim() || who;
   const occasion = /birthday/i.test(category || "") ? "It's their birthday. " : "";
   const story = about ? about.replace(/^who\s+/i, "") + ". " : "";
-  return `An original, family-friendly ${mood || "happy"} song about ${who}. ${occasion}${story}` +
+  const styleLine = bandChoice
+    ? "Let the band choose the musical style that best fits this story and mood. "
+    : (genre2
+        ? `Make it a ${mood || "happy"} song with noticeable ${genre2} influences (keep it primarily ${mood || "happy"}, not a 50/50 blend). `
+        : `Make it a ${mood || "happy"} song. `);
+  return `An original, family-friendly song about ${who}. ${occasion}${story}${styleLine}` +
          `Make it personal and joyful. The song must clearly be about and feature ${first}, working the name in naturally (it does not need to be in every line).`;
 }
 
@@ -115,7 +158,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
   if (/birthday/.test(cat)) occ = "It's their birthday, make it a celebration. ";
   else if (/pet/.test(cat)) occ = "It's a fun, loving song about their pet. ";
   else if (/fam/.test(cat)) occ = "It's about their whole family. ";
-  const feel = vibe ? `Overall feel: ${vibe}. ` : "";
+  const feel = vibeFeel(vibe);
   const must = (mustHave && String(mustHave).trim())
     ? `- MUST include these exact words / phrases / ideas, woven in naturally: ${String(mustHave).trim()}.\n`
     : "";
@@ -182,9 +225,17 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection — please slow down a bit." });
 
-  const { title, genre, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
-  const tags = styleFor(mood || genre) + vibeTag(vibe);
-  const fullPrompt = buildSongPrompt({ names, about, category, mood: mood || genre, fallback: prompt });
+  const { title, genre, genre2, bandChoice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
+  const primary = mood || genre;
+  const isBandChoice = !!bandChoice || normStyle(primary) === "bands choice";
+  const influenceName = (genre2 && !isBandChoice) ? genre2 : "";
+  const primaryStyle = isBandChoice
+    ? "warm, well-produced, family-friendly; the band chooses the most fitting musical style for this song's story, mood and lyrics"
+    : styleFor(primary);
+  const influence = influenceName ? `, with noticeable ${influenceName} influences (keep it primarily ${primary}, not a 50/50 blend)` : "";
+  const tags = primaryStyle + influence + vibeTag(vibe);
+  const lyricGenre = isBandChoice ? "" : (influenceName ? `${primary} with a touch of ${influenceName}` : primary);
+  const fullPrompt = buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
   if (!fullPrompt) return res.status(400).json({ error: "Missing prompt" });
 
   // --- entitlement: claim ONE song server-side (paid credit or a free song,
@@ -209,7 +260,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
     // Write the words first (locks the name into every chorus). Falls back to
     // Suno's own lyrics if LYRICS_PROVIDER is off or the call fails.
     let finalLyrics = lyrics;
-    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: mood || genre, category, vibe, pronounce, mustHave });
+    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: lyricGenre, category, vibe, pronounce, mustHave });
 
     let out;
     if (PROVIDER === "apiframe")        out = await viaApiframe({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
