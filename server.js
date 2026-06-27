@@ -96,6 +96,58 @@ const STYLES = {
 function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
 
+/* ------------------------------------------------------------
+   VOICE CHARACTER — make the lead vocal distinct PER GENRE so songs
+   don't all land on Suno's default voice. Sound-only descriptors (no
+   mood words). A rotating texture is added so even two songs in the
+   same genre don't sound identical.
+   ------------------------------------------------------------ */
+const VOICE_BY_GENRE = {
+  "pop":"clear, polished, contemporary",
+  "rock":"gritty and powerful with edge",
+  "country":"warm with a country twang",
+  "hip hop":"rhythmic rap delivery with confident flow",
+  "rb":"smooth and soulful with runs and melisma",
+  "dance":"bright dance-pop tone with light vocal processing",
+  "kpop":"crisp, bright and precise",
+  "afrobeats":"laid-back and melodic with a West-African lilt",
+  "amapiano":"smooth, relaxed and conversational",
+  "classical":"trained operatic tone with vibrato",
+  "lullaby":"soft, gentle, breathy and intimate",
+  "indie":"understated, characterful, slightly lo-fi",
+  "house":"airy hook vocal with processing",
+  "lofi":"soft, mellow and close-miked",
+  "reggae":"relaxed with a gentle patois lilt",
+  "latin":"passionate and rhythmic",
+  "folk":"natural, intimate and unpolished",
+  "gospel":"powerful belt with rich harmonies",
+  "jazz":"smoky and expressive with loose phrasing",
+  "blues":"raw and soulful with grit",
+  "funk":"tight and funky with attitude",
+  "disco":"bright, energetic and joyful",
+  "trance":"ethereal, processed and soaring",
+  "drill":"dark, deadpan rap flow",
+  "kwaito":"laid-back, half-sung township flow",
+  "metal":"aggressive, with screamed or growled moments where they fit",
+  "punk":"snotty, energetic and shouted",
+  "hard rock":"raspy and powerful",
+  "80s rock anthem":"big, soaring, arena-sized",
+  "musical theatre":"theatrical, projected and expressive",
+  "national anthem":"grand and proud, choir-backed",
+  "pirate adventure":"rowdy, sing-along sea-shanty",
+  "space adventure":"epic and cinematic with reverb",
+  "80s cartoon":"bright, energetic, retro",
+};
+const VOICE_TEXTURES = ["warm","raspy","bright","smoky","airy","rich","youthful","mellow","powerful","gravelly","soft","soaring","husky","velvety","clear","breathy"];
+function pickRand(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+/* A varied, genre-appropriate lead-vocal description. */
+function voiceFor(genreKey, voice) {
+  const g = VOICE_BY_GENRE[normStyle(genreKey)];
+  const gender = voice === "female" ? "female" : voice === "male" ? "male" : (Math.random() < 0.5 ? "female" : "male");
+  const texture = pickRand(VOICE_TEXTURES);
+  return g ? `, ${texture} ${gender} lead vocal, ${g}` : `, ${texture} ${gender} lead vocal`;
+}
+
 /* The Vibe is the ONLY mood we add, a short tag matching exactly what
    the user picked, nothing extra layered on. Keyed by normalised vibe. */
 const VIBE_MOD = {
@@ -333,8 +385,11 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
     ? "the band chooses the most fitting musical style for this song"
     : styleFor(primary);
   const influence = influenceName ? `, with noticeable ${influenceName} influences (keep it primarily ${primary}, not a 50/50 blend)` : "";
-  const voiceTag = voice === "female" ? ", female lead vocal" : voice === "male" ? ", male lead vocal" : "";
-  const tags = primaryStyle + influence + vibeTag(vibe) + voiceTag;
+  const voiceTag = voiceFor(genre, voice);
+  // Approximate Suno's "follow style" high + a touch of "weirdness": stay true
+  // to the genre but allow a few distinctive, unexpected production touches.
+  const styleNudge = ", true to the style with a few tasteful, unexpected production touches";
+  const tags = primaryStyle + influence + vibeTag(vibe) + voiceTag + styleNudge;
   const lyricGenre = isBandChoice ? "" : (influenceName ? `${primary} with a touch of ${influenceName}` : primary);
   const fullPrompt = buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
   if (!fullPrompt) return res.status(400).json({ error: "Missing prompt" });
