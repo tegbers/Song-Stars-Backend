@@ -240,8 +240,9 @@ async function attachCheckout(orderId, checkoutId) {
   if (!checkoutId) return;
   await db().from("orders").update({ yoco_checkout_id: checkoutId }).eq("id", orderId);
 }
-async function findOrder({ orderId, userId }) {
-  let q = db().from("orders").select("*").eq("id", orderId);
+async function findOrder({ orderId, userId, checkoutId }) {
+  let q = db().from("orders").select("*");
+  q = checkoutId ? q.eq("yoco_checkout_id", checkoutId) : q.eq("id", orderId);
   if (userId) q = q.eq("user_id", userId);
   const { data } = await q.maybeSingle();
   return data || null;
@@ -294,7 +295,10 @@ async function releasePassSong(userId) {
    Product IDs must match what you create in App Store Connect.
    ============================================================ */
 const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID || "store.bandinyourhand";
-const APPLE_VERIFY = (process.env.APPLE_VERIFY || "auto"); // 'full' | 'decodeonly' | 'auto'
+// 'full' = verify signature, FAIL CLOSED (default, production-safe).
+// 'decodeonly' = skip verification — SANDBOX BRING-UP ONLY, never in production.
+const APPLE_VERIFY = (process.env.APPLE_VERIFY || "full");
+const APPLE_ROOT_CERT_DIR = process.env.APPLE_ROOT_CERT_DIR || require("path").join(__dirname, "apple-certs");
 
 const IAP_PRODUCTS = {
   // One-off credit consumables (match the web PACKS: single/three/album)
@@ -319,30 +323,39 @@ function decodeJwsPayload(jws) {
    otherwise falls back to decode-only (fine for sandbox bring-up, NOT for
    production — set APPLE_VERIFY=full once the lib + root certs are wired). */
 async function verifyAppleJws(jws) {
-  if (APPLE_VERIFY !== "decodeonly") {
-    try {
-      const { SignedDataVerifier, Environment } = require("@apple/app-store-server-library");
-      const fs = require("fs");
-      const certDir = process.env.APPLE_ROOT_CERT_DIR; // folder of Apple root .cer/.pem files
-      if (certDir) {
-        const roots = fs.readdirSync(certDir).map((f) => fs.readFileSync(require("path").join(certDir, f)));
-        const env = (process.env.APPLE_ENVIRONMENT === "production") ? Environment.PRODUCTION : Environment.SANDBOX;
-        const appAppleId = Number(process.env.APPLE_APP_APPLE_ID || 6784852955);
-        const verifier = new SignedDataVerifier(roots, true, env, APPLE_BUNDLE_ID, appAppleId);
-        const payload = await verifier.verifyAndDecodeTransaction(jws);
-        return { payload, verified: true };
-      }
-    } catch (e) {
-      if (APPLE_VERIFY === "full") throw new Error("apple verify failed: " + e.message);
-      console.warn("apple full-verify unavailable, using decode-only:", e.message);
-    }
+  // Sandbox escape hatch ONLY. Never set APPLE_VERIFY=decodeonly in production.
+  if (APPLE_VERIFY === "decodeonly") {
+    console.warn("APPLE_VERIFY=decodeonly — signature NOT checked (sandbox only)");
+    return { payload: decodeJwsPayload(jws), verified: false };
   }
-  return { payload: decodeJwsPayload(jws), verified: false };
+  // Production path: cryptographically verify the signed transaction against Apple's
+  // root certs. Any problem (missing certs, bad signature, wrong bundle) THROWS, so
+  // grantApplePurchase never credits an unverified/forged transaction.
+  const { SignedDataVerifier, Environment } = require("@apple/app-store-server-library");
+  const fs = require("fs");
+  const path = require("path");
+  let roots;
+  try {
+    roots = fs.readdirSync(APPLE_ROOT_CERT_DIR)
+      .filter((f) => /\.(cer|pem|der|crt)$/i.test(f))
+      .map((f) => fs.readFileSync(path.join(APPLE_ROOT_CERT_DIR, f)));
+  } catch (e) {
+    throw new Error("Apple root certs missing (" + APPLE_ROOT_CERT_DIR + ") — cannot verify purchase. See apple-certs/README.md");
+  }
+  if (!roots.length) throw new Error("No Apple root certs in " + APPLE_ROOT_CERT_DIR + " — see apple-certs/README.md");
+  const env = (process.env.APPLE_ENVIRONMENT === "production") ? Environment.PRODUCTION : Environment.SANDBOX;
+  const appAppleId = Number(process.env.APPLE_APP_APPLE_ID || 6784852955);
+  const verifier = new SignedDataVerifier(roots, true, env, APPLE_BUNDLE_ID, appAppleId);
+  const payload = await verifier.verifyAndDecodeTransaction(jws); // throws on invalid signature/chain
+  return { payload, verified: true };
 }
 
 /* Verify an Apple purchase and grant it. Idempotent on transactionId. */
 async function grantApplePurchase(userId, jws) {
   const { payload, verified } = await verifyAppleJws(jws);
+  // Never grant an unverified purchase (the only unverified case is the explicit
+  // sandbox decodeonly mode, which must not be used in production).
+  if (!verified && APPLE_VERIFY !== "decodeonly") throw new Error("purchase could not be verified");
   if (payload.bundleId && payload.bundleId !== APPLE_BUNDLE_ID) throw new Error("bundle id mismatch");
   const txId = String(payload.transactionId);
   const productId = payload.productId;

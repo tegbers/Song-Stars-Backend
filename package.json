@@ -1,7 +1,7 @@
 {
   "name": "song-stars-backend",
   "version": "0.1.0",
-  "description": "Hidden backend for Song Stars - talks to Suno, returns an audio URL.",
+  "description": "Hidden backend for Song Stars — talks to Suno, returns an audio URL.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -9,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^3.1.0",
     "@supabase/supabase-js": "^2.45.4",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

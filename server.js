@@ -25,11 +25,26 @@ const accounts = require("./accounts");
 
 const app = express();
 app.use(cors());                 // lock this to your app's domain before launch
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));  // PayFast ITN posts form-encoded data
+// Keep the raw request body so we can verify webhook signatures (Yoco HMAC, PayFast ITN).
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
+app.use(express.urlencoded({ extended: true, verify: (req, _res, buf) => { req.rawBody = buf; } }));  // PayFast ITN posts form-encoded data
 
 const PROVIDER = (process.env.PROVIDER || "demo").toLowerCase();
 const PORT = process.env.PORT || 8787;
+
+/* ============================================================
+   CANONICAL PACKS — the SERVER's source of truth for price + qty.
+   The client may ask for a packId, but it NEVER sets the amount or
+   quantity: both are derived here, so a tampered request can't buy
+   more than it pays for. Keep in sync with web PACKS + Apple tiers.
+   Prices in cents (ZAR).  single R18.99 · three R49.99 · album R99.99 · pass R199
+   ============================================================ */
+const PACKS = {
+  single:     { qty: 1, cents: 1899,  name: "1 track" },
+  three:      { qty: 3, cents: 4999,  name: "3 tracks" },
+  album:      { qty: 7, cents: 9999,  name: "7 tracks (album)" },
+  studiopass: { qty: 0, cents: 19900, name: "Studio Pass (1 month)", pass: true },
+};
 
 /* Interim abuse guard: cap song generations per IP per window (resets on restart).
    A speed bump that stops runaway drain, incl. the private-browser trick, since
@@ -289,9 +304,19 @@ function buildLyricDirection(vibe) {
   };
 }
 
-function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }) {
+/* Light, optional local flavour based on the user's locale (from the browser).
+   Seasoning only — kept subtle so it never turns into forced/cringe slang. */
+function localeFlavour(locale) {
+  const l = (locale || "").toLowerCase();
+  if (/(^|[-_])za$/.test(l) || l.startsWith("af")) return "Lightly season with natural South African English where it genuinely fits the story (a little local warmth, the occasional word like 'lekker' or 'just now') — subtle seasoning, never forced, never a whole line of slang.";
+  if (/(^|[-_])(gb|ie)$/.test(l)) return "Lightly season with natural British/Irish English turns of phrase where they fit — subtle, never forced.";
+  if (/(^|[-_])(au|nz)$/.test(l)) return "Lightly season with natural Australian/New Zealand English where it fits — subtle, never forced.";
+  return "";
+}
+function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave, locale }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const feel = vibeFeel(vibe);
+  const flavour = localeFlavour(locale);
   const d = buildLyricDirection(vibe);
   const mix = /with a touch of/i.test(genre || "")
     ? `This blends two styles: about 70% the primary with subtle influence from the second, cohesive, never switching styles between sections. `
@@ -303,7 +328,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave }
     ? `The name is pronounced "${pronounce}", make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
-About them: ${about || "a wonderful person"}. ${feel}${mix}
+About them: ${about || "a wonderful person"}. ${feel}${mix}${flavour ? "\n" + flavour : ""}
 
 HOW TO WRITE:
 ${LYRIC_CORE_RULES}
@@ -377,7 +402,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection, please slow down a bit." });
 
-  const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint } = req.body || {};
+  const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint, locale } = req.body || {};
   const primary = mood || genre;
   const isBandChoice = !!bandChoice || normStyle(primary) === "bands choice";
   const influenceName = (genre2 && !isBandChoice) ? genre2 : "";
@@ -416,7 +441,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
     // Write the words first (locks the name into every chorus). Falls back to
     // Suno's own lyrics if LYRICS_PROVIDER is off or the call fails.
     let finalLyrics = lyrics;
-    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: lyricGenre, category, vibe, pronounce, mustHave });
+    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: lyricGenre, category, vibe, pronounce, mustHave, locale });
 
     let out;
     if (PROVIDER === "apiframe")        out = await viaApiframe({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
@@ -749,19 +774,69 @@ function payfastSignature(fields, passphrase) {
   return crypto.createHash("md5").update(str).digest("hex");
 }
 
+/* ---- Webhook authenticity (both providers). Fail CLOSED: if we can't prove a
+   webhook is genuine, we do NOT credit. Legit Yoco payments are still credited by
+   /api/pay/confirm, which verifies with Yoco's API directly. ---- */
+
+/* Verify a Yoco webhook signature (Svix-style HMAC over id.timestamp.rawBody). */
+function verifyYocoSignature(req) {
+  try {
+    const secret = process.env.YOCO_WEBHOOK_SECRET;      // 'whsec_...' from the Yoco dashboard
+    if (!secret) return false;
+    const id = req.headers["webhook-id"];
+    const ts = req.headers["webhook-timestamp"];
+    const sigHeader = req.headers["webhook-signature"] || "";
+    if (!id || !ts || !sigHeader || !req.rawBody) return false;
+    const signedContent = `${id}.${ts}.${req.rawBody.toString("utf8")}`;
+    const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+    const expected = crypto.createHmac("sha256", key).update(signedContent).digest("base64");
+    // header can hold several space-separated "v1,<sig>" values — match any, in constant time.
+    return sigHeader.split(" ").map((p) => p.split(",")[1]).filter(Boolean).some((p) => {
+      try { return crypto.timingSafeEqual(Buffer.from(p), Buffer.from(expected)); } catch { return false; }
+    });
+  } catch (e) { console.error("verifyYocoSignature:", e.message); return false; }
+}
+
+/* Verify a PayFast ITN: (1) recompute + match the md5 signature, (2) confirm the
+   POST really came from PayFast via their server-to-server validate endpoint. */
+async function verifyPayfastItn(body, req) {
+  try {
+    const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+    const entries = Object.entries(body).filter(([k]) => k !== "signature");
+    const pfEncode = (v) => encodeURIComponent(String(v).trim()).replace(/%20/g, "+");
+    let str = entries.map(([k, v]) => `${k}=${pfEncode(v)}`).join("&");
+    if (passphrase) str += `&passphrase=${pfEncode(passphrase)}`;
+    const expected = crypto.createHash("md5").update(str).digest("hex");
+    if (!body.signature || body.signature !== expected) { console.warn("payfast sig mismatch"); return false; }
+    const host = process.env.PAYFAST_SANDBOX === "true" ? "https://sandbox.payfast.co.za" : "https://www.payfast.co.za";
+    const postback = req.rawBody ? req.rawBody.toString("utf8")
+      : entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim())}`).join("&");
+    const r = await fetch(`${host}/eng/query/validate`, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: postback,
+    });
+    const txt = (await r.text()).trim();
+    if (!/^VALID/i.test(txt)) { console.warn("payfast validate not VALID:", txt.slice(0, 40)); return false; }
+    return true;
+  } catch (e) { console.error("verifyPayfastItn:", e.message); return false; }
+}
+
 app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
-  const { packId, amount, qty, email, kind } = req.body || {};
+  const { packId, email, kind } = req.body || {};
   const isPass = kind === "pass" || packId === "studiopass";
-  const useQty = isPass ? 0 : qty;
-  if (!amount || (!isPass && !useQty)) return res.status(400).json({ error: "Missing amount/qty" });
-  const itemName = isPass ? "Band in Your Hand - Studio Pass (1 month)" : `Band in Your Hand - ${qty} track${qty > 1 ? "s" : ""}`;
+  // SERVER decides price + quantity from the canonical PACKS table. Any client-sent
+  // amount/qty is ignored — this is what stops "buy 100 credits for 1 cent".
+  const pack = PACKS[isPass ? "studiopass" : packId];
+  if (!pack) return res.status(400).json({ error: "Unknown pack" });
+  const amount = pack.cents / 100;   // ZAR, used by the provider calls below
+  const useQty = pack.qty;
+  const itemName = `Band in Your Hand - ${pack.name}`;
 
   // Record the order server-side FIRST (pending). Credits/pass are only granted
   // once payment is confirmed (webhook or /api/pay/confirm), never from the browser.
   let orderId = null;
   if (accounts.accountsEnabled() && req.user) {
     try {
-      orderId = await accounts.createOrder({ userId: req.user.id, packId: isPass ? "studiopass" : packId, qty: useQty, amountCents: Math.round(amount * 100) });
+      orderId = await accounts.createOrder({ userId: req.user.id, packId: isPass ? "studiopass" : packId, qty: useQty, amountCents: pack.cents });
     } catch (e) {
       console.error("createOrder:", e.message);
       return res.status(500).json({ error: "Could not start your order. Try again." });
@@ -777,7 +852,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
         body: JSON.stringify({
           amount: Math.round(amount * 100),
           currency: "ZAR",
-          metadata: { orderId: orderId || "", packId, qty, email },
+          metadata: { orderId: orderId || "", packId, qty: useQty, email },
           successUrl: `${process.env.APP_URL || ""}/?order=${orderId || ""}`,
           cancelUrl: `${process.env.APP_URL || ""}/`,
         }),
@@ -829,7 +904,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
     if (accounts.accountsEnabled() && req.user && orderId) {
       await accounts.markOrderPaidAndCredit({ orderId });
     }
-    return res.json({ provider: "demo", status: "granted", qty, orderId });
+    return res.json({ provider: "demo", status: "granted", qty: useQty, orderId });
   } catch (err) {
     console.error("pay/create failed:", err.message);
     res.status(502).json({ error: "Payment init failed", detail: err.message });
@@ -897,22 +972,36 @@ app.post("/api/pay/apple/verify", accounts.requireAuth, async (req, res) => {
 app.post("/api/pay/webhook", async (req, res) => {
   try {
     const body = req.body || {};
-    let checkoutId, orderId, succeeded;
+    let checkoutId, orderId, succeeded, paidCents = null;
+
     if (body.payment_status || body.m_payment_id) {
-      // PayFast ITN (form-encoded). payment_status === "COMPLETE" on success.
+      // ---- PayFast ITN (form-encoded) — must pass signature + server-to-server validate.
+      if (!(await verifyPayfastItn(body, req))) { console.warn("payfast ITN rejected"); return res.sendStatus(200); }
       orderId = body.m_payment_id || body.custom_str1;
       succeeded = /complete/i.test(String(body.payment_status || ""));
+      if (body.amount_gross != null) paidCents = Math.round(Number(body.amount_gross) * 100);
     } else {
-      // Yoco webhook (JSON).
+      // ---- Yoco webhook (JSON) — must pass HMAC signature.
+      if (!verifyYocoSignature(req)) { console.warn("yoco webhook rejected"); return res.sendStatus(200); }
       const payload = body.payload || body.data || body;
       checkoutId = payload.id || payload.checkoutId || (payload.metadata && payload.metadata.checkoutId);
       orderId = payload.metadata && payload.metadata.orderId;
       succeeded = /succeed|complete|paid|success/i.test(String(body.type || payload.status || ""));
+      if (payload.amount != null) paidCents = Number(payload.amount);
     }
+
     if (accounts.accountsEnabled() && succeeded && (checkoutId || orderId)) {
+      // Match the amount actually paid against the server-side order before crediting.
+      const order = await accounts.findOrder({ orderId: orderId || null, checkoutId: checkoutId || null });
+      if (!order) { console.warn("webhook: order not found", orderId || checkoutId); return res.sendStatus(200); }
+      if (paidCents != null && Number(order.amount_cents) !== Number(paidCents)) {
+        console.warn("webhook amount mismatch", order.amount_cents, paidCents); return res.sendStatus(200);
+      }
       await accounts.markOrderPaidAndCredit({ checkoutId, orderId });
+      console.log("payment webhook: credited", PAY_PROVIDER, order.id);
+    } else {
+      console.log("payment webhook:", PAY_PROVIDER, "ignored");
     }
-    console.log("payment webhook:", PAY_PROVIDER, succeeded ? "ok" : "ignored", checkoutId || orderId || "");
   } catch (e) {
     console.error("webhook:", e.message);
   }
