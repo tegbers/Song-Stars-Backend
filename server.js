@@ -19,12 +19,22 @@
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const crypto = require("crypto");
 require("dotenv").config();
 const accounts = require("./accounts");
 
 const app = express();
-app.use(cors());                 // lock this to your app's domain before launch
+// Lock CORS to our own web origins. Non-browser clients (native app, server-to-server) send no
+// Origin and are allowed; other websites are blocked from calling the API in a browser.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
+  "https://bandinyourhand.store,https://www.bandinyourhand.store,https://ubiquitous-dieffenbachia-c96feb.netlify.app")
+  .split(",").map((s) => s.trim());
+app.use(cors({
+  origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.includes(origin)),
+  credentials: false,
+}));
+app.use(helmet({ contentSecurityPolicy: false })); // security headers (frontend CSP lives on Netlify)
 // Keep the raw request body so we can verify webhook signatures (Yoco HMAC, PayFast ITN).
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, verify: (req, _res, buf) => { req.rawBody = buf; } }));  // PayFast ITN posts form-encoded data
@@ -896,7 +906,6 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
       const sigBase = paramStr + (pass ? `&passphrase=${pfEncode(pass)}` : "");
       const signature = crypto.createHash("md5").update(sigBase).digest("hex");
       const redirectUrl = `${base}?${paramStr}&signature=${signature}`;
-      console.log("payfast paramStr:", paramStr, "| sig:", signature);
       return res.json({ provider: "payfast", redirectUrl, orderId });
     }
 
