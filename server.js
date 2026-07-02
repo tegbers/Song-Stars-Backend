@@ -323,11 +323,74 @@ function localeFlavour(locale) {
   if (/(^|[-_])(au|nz)$/.test(l)) return "Lightly season with natural Australian/New Zealand English where it fits — subtle, never forced.";
   return "";
 }
+/* ============================================================
+   SURPRISE ME — CONCEPT ENGINE
+   When the vibe is "Surprise Me" we hand the lyric writer a fun,
+   unexpected ANGLE to frame the song around, on top of the usual
+   structure variance. Angles are modern, relatable and shareable,
+   wrapped lovingly around the REAL person (they stay the hero).
+   Pure data — add/remove freely as new fads land.
+   SAFETY IS BUILT IN: pop-culture only as light everyday seasoning
+   (idioms & formats), never a trademarked world, real celebrities,
+   or real song lyrics; always family-safe (no politics, religion,
+   tragedy, illness, or anything at the person's expense).
+   ============================================================ */
+const SURPRISE_ANGLES_UNIVERSAL = [
+  "the undefeated champion of the family WhatsApp group (147 unread, mostly from them)",
+  "someone whose secret superpower is Jedi mind tricks at bedtime",
+  "the household's self-appointed head of security",
+  "the one who refuses to ask for directions while the GPS quietly gives up",
+  "a thrifty legend on a heroic quest to the cheaper petrol station, running on fumes",
+  "the auntie or uncle who caters for thirty when three are coming",
+  "the keeper of sacred braai rules that may never be broken",
+  "the family member with unmistakable main-character energy",
+  "narrated like an over-dramatic nature documentary about their daily habits",
+  "framed as an epic movie-trailer voiceover about a very ordinary hero",
+  "a telenovela-style saga over something tiny, like the missing TV remote",
+  "the reigning final boss of every board-game night",
+  "their glow-up story, from back-in-the-day to the legend they are now",
+  "the one who 'isn't hungry' and then eats everyone's chips",
+  "a tiny lawyer negotiating a later bedtime, clause by clause",
+  "the voice-note sender who could have just typed it",
+  "the video-call hero whose whole personality is 'you're on mute'",
+  "the romantic who gave their partner a full tank of petrol as a birthday gift, and meant it with all their heart",
+  "star of an unexpected plot twist that turned out to be the best thing",
+  "the household DJ whose road-trip playlist nobody agreed to",
+  "the thermostat-war general defending the house from a single degree",
+  "the banana-bread champion of the stay-at-home era",
+  "the dog or cat who is genuinely convinced they run this household",
+];
+const SURPRISE_ANGLES_ZA = [
+  "the amapiano-loving heart of every family gathering",
+  "the one who turns a load-shedding candlelit dinner into pure romance",
+  "a braai-master whose tongs are a symbol of high office",
+  "the family member who says 'just now' and means sometime this decade",
+];
+const SURPRISE_ANGLES_SEASONAL = {
+  0:  ["the New Year's-resolution hero whose plan lasted a proud three days"],
+  8:  ["the Heritage-Day braai commander in full glory"],
+  10: ["the one already planning the festive-season family logistics like a general"],
+  11: ["the unstoppable force behind the family's festive-season chaos"],
+};
+const POP_CULTURE_SEASONING = "You MAY sprinkle light, everyday pop-culture seasoning that has entered common speech (e.g. 'Jedi mind trick', 'main-character energy', 'plot twist', 'final boss', 'glow-up', 'speedrun', or telenovela / movie-trailer / nature-documentary styling). Keep it a wink, never the whole song. Do NOT build the song around a trademarked franchise or its characters, do NOT name or impersonate real people or celebrities, and never reproduce real song lyrics.";
+const SURPRISE_SAFETY = "Keep it affectionate and firmly WITH the person, celebrating them — never at their expense, never embarrassing. Family-safe: no politics, religion, tragedy, illness, or real public figures. Any cost-of-living or stay-at-home references stay light and playfully nostalgic (thrifty-hero energy, the banana-bread era, the confused dog when everyone stayed home) — never money stress, sickness or loss.";
+function pickSurpriseAngle(locale) {
+  let pool = SURPRISE_ANGLES_UNIVERSAL.slice();
+  const l = (locale || "").toLowerCase();
+  if (/(^|[-_])za$/.test(l) || l.startsWith("af")) pool = pool.concat(SURPRISE_ANGLES_ZA);
+  const seasonal = SURPRISE_ANGLES_SEASONAL[new Date().getMonth()];
+  if (seasonal) pool = pool.concat(seasonal);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave, locale }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const feel = vibeFeel(vibe);
   const flavour = localeFlavour(locale);
   const d = buildLyricDirection(vibe);
+  const surprise = (normStyle(vibe) === "surprise me")
+    ? `\n\nSURPRISE ME — make this one delightfully unexpected and shareable. Frame the song around this angle, adapting it to the real details about them (they stay the loved hero, never the punchline): ${pickSurpriseAngle(locale)}.\n${POP_CULTURE_SEASONING}\n${SURPRISE_SAFETY}`
+    : "";
   const mix = /with a touch of/i.test(genre || "")
     ? `This blends two styles: about 70% the primary with subtle influence from the second, cohesive, never switching styles between sections. `
     : "";
@@ -338,7 +401,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave, 
     ? `The name is pronounced "${pronounce}", make sure it is sung exactly that way.`
     : `The name may be a regional or non-English name (e.g. South African, African, Indian or other origins). Make sure it is sung and pronounced correctly; if an English-singing voice would likely mispronounce it, spell it phonetically in the lyrics so it sounds right when sung, while keeping it clearly their name.`;
   return `Write original ${genre || "pop"} song lyrics about ${names || "someone special"}.
-About them: ${about || "a wonderful person"}. ${feel}${mix}${flavour ? "\n" + flavour : ""}
+About them: ${about || "a wonderful person"}. ${feel}${mix}${flavour ? "\n" + flavour : ""}${surprise}
 
 HOW TO WRITE:
 ${LYRIC_CORE_RULES}
