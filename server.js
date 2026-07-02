@@ -613,8 +613,13 @@ Write it in the voice of ${narrator}.
 Lean on at least two of these comic techniques (never name them):
 ${techniques.map((t) => "- " + t).join("\n")}
 You MAY sprinkle a couple of these as light seasoning, never the whole joke: ${refs.join(", ")}.
-Never stop at the first funny idea — push it, then push it again, then once more. The chorus must be a big, addictive, shout-along hook that makes someone grin before it finishes.
-Before you finish, silently check: would a kid laugh AND would an adult? is it surprising and original (not a joke we've all heard)? is the chorus addictive? is it squeaky clean? does it avoid sounding AI-generated? would someone screenshot and share it? If any answer is "no", rewrite until it's "yes".`;
+Never stop at the first funny idea — push it, then push it again, then once more.
+CHORUS — this is the money moment: one big, addictive, shout-along hook built around a single killer line (ideally a phrase people could quote back). It should be the FUNNIEST, most repeatable part of the whole song, and land a grin before it finishes. Repeat that hook line; don't rewrite the chorus every time.
+BRIDGE — the bridge must TURN, not just repeat: a fresh angle, a sudden reveal, a confession, or one more escalation that makes the last chorus hit harder ("oh no, it's even worse than we thought"). Never use the bridge as filler.
+WORDPLAY — earn the "clever": lean on puns, double meanings, unexpected internal rhymes and a setup-then-swerve. Rhymes should feel surprising and effortless, never forced or nursery-rhyme obvious.
+BUTTON — end on a strong closing line that lands the joke one final time (a punchline, a callback, or a tiny twist), so the song finishes on a laugh, not a fade.
+NO FILLER — every single line must carry a joke, a vivid image, or an escalation. Cut any line that's just there to rhyme.
+Before you finish, silently check: would a kid laugh AND would an adult? is it surprising and original (not a joke we've all heard)? is the chorus addictive and quotable? does the bridge actually turn? is the wordplay genuinely clever? is there a strong closing button? is it squeaky clean? does it avoid sounding AI-generated? would someone screenshot and share it? If any answer is "no", rewrite until it's "yes".`;
 }
 
 function topicLyricBrief({ topic, genre, locale }) {
@@ -684,31 +689,80 @@ ${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
 
+const LYRICS_SYSTEM = "You are a world-class comedy songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean, laugh-out-loud lyrics with clever wordplay, an addictive chorus and a bridge that turns.";
+
 async function writeLyrics(input) {
   try {
+    const isSurprise = !!input.surpriseTopic || normStyle(input.vibe) === "surprise me";
     const brief = input.surpriseTopic ? topicLyricBrief(input) : lyricBrief(input);
+    // Surprise Me = comedy is the whole point, so run a two-model bake-off and keep
+    // the funnier result. Everything else stays on the fast, cheap path.
+    if (isSurprise) {
+      const best = await lyricsBestOf(brief);
+      if (best) return best;
+    }
     if (LYRICS_PROVIDER === "openai") return await lyricsOpenAI(brief);
     if (LYRICS_PROVIDER === "anthropic") return await lyricsAnthropic(brief);
   } catch (e) { console.error("lyrics failed (Suno will write them instead):", e.message); }
   return null;
 }
-async function lyricsOpenAI(brief) {
+
+// Two-model bake-off for Surprise Me: write with Claude Sonnet AND GPT-4o in
+// parallel, then judge which is funnier/most singable and return the winner.
+// Degrades gracefully — if only one model responds, we use it; if the judge
+// fails, we keep the first good candidate.
+async function lyricsBestOf(brief) {
+  const results = await Promise.allSettled([
+    lyricsAnthropic(brief, { model: "claude-sonnet-4-6", maxTokens: 900 }),
+    lyricsOpenAI(brief, { model: "gpt-4o", maxTokens: 900 }),
+  ]);
+  const cands = [];
+  if (results[0].status === "fulfilled" && results[0].value) cands.push({ src: "sonnet", text: results[0].value });
+  if (results[1].status === "fulfilled" && results[1].value) cands.push({ src: "gpt-4o", text: results[1].value });
+  results.forEach((r) => { if (r.status === "rejected") console.warn("bake-off candidate failed:", r.reason && r.reason.message); });
+  if (cands.length === 0) return null;
+  if (cands.length === 1) return cands[0].text;
+  try {
+    const winner = await judgeLyrics(cands.map((c) => c.text));
+    if (winner >= 0 && cands[winner]) return cands[winner].text;
+  } catch (e) { console.warn("lyric judge failed, using first candidate:", e.message); }
+  return cands[0].text;
+}
+
+// Cheap, fast judge — picks the funniest, most singable option. Returns index.
+async function judgeLyrics(options) {
+  const key = process.env.OPENAI_API_KEY; if (!key) return 0;
+  const labelled = options.map((o, i) => `OPTION ${i + 1}:\n${o}`).join("\n\n---\n\n");
+  const prompt = `You are a ruthless comedy-song editor. Two versions of the SAME song brief are below. Pick the ONE that is genuinely funnier and more shareable, judged on: laugh-out-loud jokes, clever wordplay, an addictive quotable chorus, a bridge that actually turns, a strong closing button, and singability. It must be squeaky-clean all-ages. Reply with ONLY the number of the best option (e.g. "1" or "2"), nothing else.\n\n${labelled}`;
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0, max_tokens: 3,
+      messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!r.ok) throw new Error("judge " + r.status);
+  const d = await r.json();
+  const txt = (d.choices && d.choices[0] && d.choices[0].message.content || "").trim();
+  const n = parseInt((txt.match(/\d+/) || ["1"])[0], 10);
+  return isNaN(n) ? 0 : Math.max(0, Math.min(options.length - 1, n - 1));
+}
+
+async function lyricsOpenAI(brief, opts = {}) {
   const key = process.env.OPENAI_API_KEY; if (!key) throw new Error("Set OPENAI_API_KEY");
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.9, max_tokens: 500,
-      messages: [ { role: "system", content: "You are a world-class songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean lyrics." },
+    body: JSON.stringify({ model: opts.model || "gpt-4o-mini", temperature: 0.9, max_tokens: opts.maxTokens || 500,
+      messages: [ { role: "system", content: LYRICS_SYSTEM },
                   { role: "user", content: brief } ] }),
   });
   if (!r.ok) throw new Error("OpenAI " + r.status);
   const d = await r.json(); return (d.choices && d.choices[0] && d.choices[0].message.content || "").trim() || null;
 }
-async function lyricsAnthropic(brief) {
+async function lyricsAnthropic(brief, opts = {}) {
   const key = process.env.ANTHROPIC_API_KEY; if (!key) throw new Error("Set ANTHROPIC_API_KEY");
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 600,
-      system: "You are a world-class songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean lyrics.",
+    body: JSON.stringify({ model: opts.model || "claude-3-5-haiku-latest", max_tokens: opts.maxTokens || 600,
+      system: LYRICS_SYSTEM,
       messages: [ { role: "user", content: brief } ] }),
   });
   if (!r.ok) throw new Error("Anthropic " + r.status);
