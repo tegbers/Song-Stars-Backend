@@ -408,9 +408,36 @@ async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
    Body: { title, genre, prompt, lyrics }
    Returns: { audioUrl }
    ------------------------------------------------------------ */
+/* In-memory idempotency for song generation. A single create tap can reach us
+   more than once (mobile networks are flaky and a real song takes 30-90s, so the
+   app may decide the request failed and retry). Generating is NOT free — it claims
+   a credit and burns Suno time — so a naive retry made the SAME song several times
+   and charged for each. Keyed by the client's requestId, we run the work once and
+   hand every duplicate the exact same result, no extra charge. Single-instance
+   store; the 5-min TTL is just cleanup, well past any realistic retry window. */
+const genIdem = new Map(); // requestId -> Promise<payload>
+
 app.post("/api/generate", accounts.requireAuth, async (req, res) => {
+  const requestId = req.body && req.body.requestId;
+  if (requestId && genIdem.has(requestId)) {
+    // Duplicate of an in-flight or just-finished request: return the same
+    // outcome instead of making (and charging for) another song.
+    try { return res.json(await genIdem.get(requestId)); }
+    catch (e) { return res.status(e.httpStatus || 502).json(e.payload || { error: "Generation failed", detail: e.message }); }
+  }
+  const work = runGenerate(req);
+  if (requestId) { genIdem.set(requestId, work); setTimeout(() => genIdem.delete(requestId), 5 * 60 * 1000); }
+  try { res.json(await work); }
+  catch (e) { res.status(e.httpStatus || 502).json(e.payload || { error: "Generation failed", detail: e.message }); }
+});
+
+// Typed error so the idempotency wrapper can reproduce the exact HTTP response
+// for the first caller and every duplicate alike.
+function genErr(httpStatus, payload) { const e = new Error(payload.error || "generate"); e.httpStatus = httpStatus; e.payload = payload; return e; }
+
+async function runGenerate(req) {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
-  if (!rateOk(ip)) return res.status(429).json({ error: "Too many songs from this connection, please slow down a bit." });
+  if (!rateOk(ip)) throw genErr(429, { error: "Too many songs from this connection, please slow down a bit." });
 
   const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint, locale } = req.body || {};
   const primary = mood || genre;
@@ -427,7 +454,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const tags = primaryStyle + influence + vibeTag(vibe) + voiceTag + styleNudge;
   const lyricGenre = isBandChoice ? "" : (influenceName ? `${primary} with a touch of ${influenceName}` : primary);
   const fullPrompt = buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
-  if (!fullPrompt) return res.status(400).json({ error: "Missing prompt" });
+  if (!fullPrompt) throw genErr(400, { error: "Missing prompt" });
 
   // --- entitlement: claim ONE song server-side (paid credit or a free song,
   //     capped per account AND per device). 'none' => must pay. ---
@@ -440,10 +467,10 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
       if (mode === "none") mode = await accounts.claimSong(req.user.id, fingerprint); // 'paid' | 'free' | 'none'
     } catch (e) {
       console.error("claim song:", e.message);
-      return res.status(500).json({ error: "Could not check your song balance. Try again." });
+      throw genErr(500, { error: "Could not check your song balance. Try again." });
     }
     if (mode === "none") {
-      return res.status(402).json({ error: "no_songs_left", message: "You've used your free songs, grab a Single, an Album, or a Studio Pass to keep making music." });
+      throw genErr(402, { error: "no_songs_left", message: "You've used your free songs, grab a Single, an Album, or a Studio Pass to keep making music." });
     }
   }
 
@@ -478,7 +505,7 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
       }
       status = await accounts.statusFor(req.user.id, fingerprint);
     }
-    res.json({ ...out, savedId, provider: PROVIDER, status });
+    return { ...out, savedId, provider: PROVIDER, status };
   } catch (err) {
     // our failure, not theirs: give the song back
     if (accounts.accountsEnabled() && req.user) {
@@ -486,9 +513,9 @@ app.post("/api/generate", accounts.requireAuth, async (req, res) => {
       else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
     }
     console.error("generate failed:", err.message);
-    res.status(502).json({ error: "Generation failed", detail: err.message });
+    throw genErr(502, { error: "Generation failed", detail: err.message });
   }
-});
+}
 
 /* The app reads this after sign-in (and after a payment) to know the
    user's real, server-side balance + free songs left. */
