@@ -373,7 +373,7 @@ const SURPRISE_ANGLES_SEASONAL = {
   11: ["the unstoppable force behind the family's festive-season chaos"],
 };
 const POP_CULTURE_SEASONING = "You MAY sprinkle light, everyday pop-culture seasoning that has entered common speech (e.g. 'Jedi mind trick', 'main-character energy', 'plot twist', 'final boss', 'glow-up', 'speedrun', or telenovela / movie-trailer / nature-documentary styling). Keep it a wink, never the whole song. Do NOT build the song around a trademarked franchise or its characters, do NOT name or impersonate real people or celebrities, and never reproduce real song lyrics.";
-const SURPRISE_SAFETY = "Keep it affectionate and firmly WITH the person, celebrating them — never at their expense, never embarrassing. Family-safe: no politics, religion, tragedy, illness, or real public figures. Any cost-of-living or stay-at-home references stay light and playfully nostalgic (thrifty-hero energy, the banana-bread era, the confused dog when everyone stayed home) — never money stress, sickness or loss.";
+const SURPRISE_SAFETY = "Keep it affectionate and firmly WITH the person, celebrating them — never at their expense, never embarrassing. Family-safe: no politics, religion, tragedy, illness, or real public figures. Any cost-of-living or stay-at-home references stay light and playfully nostalgic (thrifty-hero energy, the banana-bread era, the confused dog when everyone stayed home) — never money stress, sickness or loss. ALL-AGES IS THE BAR: it must make an 8-year-old AND their mum laugh together — squeaky clean, no innuendo, no crude, edgy or adult humour, nothing you couldn't sing at a kid's birthday party. The funny comes from warmth, silliness and relatable truth, never from edge.";
 function pickSurpriseAngle(locale) {
   let pool = SURPRISE_ANGLES_UNIVERSAL.slice();
   const l = (locale || "").toLowerCase();
@@ -383,13 +383,272 @@ function pickSurpriseAngle(locale) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+/* ============================================================
+   SURPRISE ME (one tap, NO person) — TOPIC ENGINE
+   The home "Surprise me" button makes a random, standalone, laugh-out-loud
+   song about a fun TOPIC (no name needed). Pure hook: contemporary, clever,
+   a bit corny, endlessly shareable. Data only — add fads freely. Same safety
+   + pop-culture tiering as the angle engine.
+   ============================================================ */
+/* HUMAN TRUTHS — the gold. Tiny universal behaviours everyone secretly does.
+   The engine favours these over pop culture: the bullseye is a listener pointing
+   across the room going "THAT'S YOU!" Add freely. */
+const HUMAN_TRUTHS = [
+  "hitting snooze with sniper accuracy while completely unconscious, then missing every other alarm",
+  "solving every life problem in the shower, then forgetting all of it before the towel",
+  "being physically unable to speak before the first coffee",
+  "a password needing an uppercase, a number, a symbol and a childhood fear — then forgetting it instantly",
+  "everyone secretly pretending they know how to fold a fitted sheet",
+  "going in for milk and leaving with candles, chips, batteries and a kayak — but no milk",
+  "hunting for your phone using the flashlight on your phone",
+  "searching the whole couch, then accusing the kids, who were holding the remote",
+  "'I know a quicker way' — arriving forty-two minutes late",
+  "owning seventeen charging cables and not one of them fits",
+  "hitting 2% battery and suddenly becoming the fastest texter alive",
+  "opening the fridge, closing it, opening it again hoping food has appeared",
+  "'I'll just have something small' becoming a three-course meal at 11:47pm",
+  "347 unread messages: read exactly one, mark all as read",
+  "screenshotting everything and never once looking at it again",
+  "saying 'what?' and then understanding halfway through the repeat",
+  "turning the TV volume down so you can taste the food better",
+  "car keys vanishing inside your own house, then reappearing in your hand",
+  "the one sock that disappears in the wash and is never seen again",
+  "packing for rain, snow, safari and dinner with royalty — for a two-day trip",
+  "washing the car so it starts raining immediately",
+  "always, somehow, choosing the slowest queue",
+  "never trusting the microwave, stopping it at one second, every single time",
+  "spending forty-five minutes choosing on Netflix, then falling asleep in the intro",
+  "'I'm only having one spoon' and the whole tub is gone",
+  "driving eighteen kilometres to save four rand on petrol",
+  "getting genuinely thrilled about a new vacuum, socks on special, or working Wi-Fi",
+  "'I'll remember that' — never, ever remembering",
+  "procrastination: proudly making it tomorrow's problem",
+  "impossible to wake at 5am for work, wide awake at 4:58am for a holiday",
+  "picking up the phone, forgetting why, putting it down, instantly remembering",
+  "'I don't want fries' — then eating half of yours",
+  "the thermostat war: one person freezing, one boiling, neither ever compromising",
+  "the meeting ends and immediately the real meeting begins in the car park",
+  "turning your phone face-down so nobody knows you're ignoring them — while ignoring them",
+  "reading a message, replying to it perfectly in your head, never actually replying",
+  "unlocking your phone to do one thing, forgetting it, checking Instagram instead",
+  "taking twenty photos to keep exactly one",
+  "declaring 19% battery 'basically dead' and rushing to charge",
+  "saying 'I'll Google it' before anyone has finished the question",
+  "burning your mouth because you could not wait five seconds",
+  "cutting the pizza into tiny slices to pretend you ate less",
+  "buying healthy groceries and immediately ordering takeaway",
+  "deciding dessert doesn't count if you eat it standing up",
+  "lying awake calculating exactly how tired you'll be tomorrow",
+  "waking two minutes before the alarm and feeling personally cheated",
+  "a 'quick nap' that somehow ends tomorrow",
+  "buying it because it was on sale, not because you needed it",
+  "carrying seventeen shopping bags in one trip to avoid a second one",
+  "walking into a room and completely forgetting why",
+  "going upstairs for one thing and coming back with a different thing",
+  "leaving the lights on in rooms you left an hour ago",
+  "talking to yourself because nobody else grasps the situation",
+  "cleaning the house before the cleaner arrives",
+  "turning the music down so you can park properly",
+  "talking to your car like it can hear you",
+  "shouting 'watch out!' from the passenger seat two seconds too late",
+  "thanking a driver who let you merge, who absolutely cannot hear you",
+  "jiggling the mouse so the computer doesn't look idle",
+  "starting every task by first making a coffee",
+  "answering three emails and calling it a busy day",
+  "buying the gym clothes instead of going to the gym",
+  "rewarding a 200-calorie workout with pizza",
+  "moving clutter from one room to another and calling it tidying",
+  "vacuuming around the thing instead of moving the thing",
+  "the one chair that exists purely to hold clothes",
+  "nodding along even though you didn't hear a single word",
+  "thinking of the perfect comeback three hours too late",
+  "feeling personally attacked by an autocorrect suggestion",
+  "looking everywhere for the glasses you are currently wearing",
+  "saying 'ouch' to the furniture that hurt you",
+  "the dog greeting you like you've been gone ten years after a five-minute trip",
+  "the cat looking deeply offended that you exist",
+  "pressing the remote harder as if that adds power",
+  "restarting it, because that's the only IT advice anyone knows",
+  "47 browser tabs open because 'I'll read that later'",
+  "the child ignoring the gift to play with the cardboard box",
+  "suddenly needing the toilet the exact moment you leave the house",
+];
+/* LEVEL 2 — GENERATIONAL TRUTHS (recognisable to a generation). */
+const GENERATIONAL_TRUTHS = [
+  "the screech of dial-up internet and the patience it demanded",
+  "MSN Messenger nudges and cryptic away-message feelings",
+  "Friday night at the video store choosing the wrong film",
+  "waiting all night for one song to download (and getting a virus)",
+  "keeping a Tamagotchi alive, and the guilt when you didn't",
+  "making someone a cassette mixtape to say what you couldn't",
+  "the DVD menu music looping into infinity",
+  "Snake on an old Nokia and a ringtone you chose with pride",
+  "rewinding the tape before returning it, purely out of honour",
+  "blowing into a game cartridge to make it work",
+];
+/* LEVEL 3 — CULTURAL TRUTHS (locale-flavoured; only surfaced when it fits). */
+const CULTURAL_TRUTHS = [
+  "braai etiquette and the sacred question of who holds the tongs",
+  "the family WhatsApp group and its 274 unread messages",
+  "planning the whole evening around the load-shedding schedule",
+  "a Sunday lunch cooked to feed a small village",
+  "the great road-trip snack negotiation",
+  "petrol-price panic and the detour to save four rand",
+  "'just now' versus 'now-now' — a national timing mystery",
+  "rationing the last of the biltong like buried treasure",
+  "amapiano quietly taking over every family gathering",
+  "waiting at the robot that everyone else calls a traffic light",
+];
+/* Combined pool the Comedy Engine samples for 'write in this spirit' examples. */
+const ALL_TRUTHS = HUMAN_TRUTHS.concat(GENERATIONAL_TRUTHS, CULTURAL_TRUTHS);
+
+const SURPRISE_TOPICS_UNIVERSAL = [
+  "dad jokes so bad they loop back to funny",
+  "the family group chat at 2am",
+  "'you're on mute' — the eternal video-call anthem",
+  "running out of data at the worst possible moment",
+  "Monday morning versus the snooze button",
+  "the office coffee machine and its secret power over us all",
+  "the GPS that confidently drives you into a field",
+  "the fridge you open fourteen times hoping for new snacks",
+  "a house cat quietly plotting world domination",
+  "the Wi-Fi router: the most powerful being in the home",
+  "the never-ending search for the TV remote",
+  "the printer that can smell your fear",
+  "trying (and failing) to fold a fitted sheet",
+  "autocorrect and its greatest betrayals",
+  "the friend who says 'I'm 5 minutes away' (they are not)",
+  "Sunday naps: a great romance",
+  "parallel parking while everyone watches",
+  "a Wookiee's well-earned day off",
+  "the group project where one person did everything",
+  "gym membership guilt in musical form",
+  "the family WhatsApp group with 274 unread messages",
+  "the relative who forwards absolutely everything",
+  "the uncle who knows a secret shortcut for everything",
+  "the cousin who still hasn't left after Christmas",
+  "voice notes longer than a feature film",
+  "accidentally hitting reply-all to the whole company",
+  "low-battery anxiety at 2 percent",
+  "the meeting that could have been an email",
+  "the video-call camera strategically left off",
+  "negotiating bedtime with a four-year-old lawyer",
+  "the snack demanded three minutes after dinner",
+  "a goldfish with completely unexplained confidence",
+  "the reverse-park that became an Olympic event",
+  "missing the turn because everyone was singing",
+  "the mixtape made to say what you couldn't out loud",
+  "dial-up internet and the patience of saints",
+  "the DVD menu music stuck on infinite loop",
+  "frosted tips and other crimes of the early 2000s",
+  "the Tamagotchi you let down and never forgot",
+  "leftovers claimed with the passion of a blood feud",
+];
+const SURPRISE_TOPICS_ZA = [
+  "braai tongs and the men sworn to guard them",
+  "'just now' — a great South African mystery",
+  "the heroic saga of surviving load-shedding",
+  "amapiano quietly taking over every family gathering",
+];
+function pickSurpriseTopic(locale) {
+  const l = (locale || "").toLowerCase();
+  const za = /(^|[-_])za$/.test(l) || l.startsWith("af");
+  // Level 1 universal truths lead (x2), then generational + the wider topic bank;
+  // Level 3 cultural truths only surface when the locale fits.
+  let pool = HUMAN_TRUTHS.concat(HUMAN_TRUTHS, GENERATIONAL_TRUTHS, SURPRISE_TOPICS_UNIVERSAL);
+  if (za) pool = pool.concat(CULTURAL_TRUTHS, SURPRISE_TOPICS_ZA);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/* ============================================================
+   THE COMEDY ENGINE (shared by both Surprise modes)
+   Comedy is the #1 job. We rotate a narrator voice + a few comic
+   techniques + light pop-culture seasoning, and end with a silent
+   quality-control pass, so no two surprises feel like cousins.
+   Pure data — extend the banks freely.
+   ============================================================ */
+function pickN(arr, n) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, n); }
+const COMEDY_TECHNIQUES = [
+  "Escalation: start small and reasonable, then push the idea further every verse until it's gloriously out of hand.",
+  "Rule of three: build a little list where the third item is the unexpected, funnier one.",
+  "Fake seriousness: treat something tiny and silly with the gravity of a national emergency.",
+  "Absurd comparison: measure the everyday thing against something epic and ridiculous.",
+  "Understatement: react to something enormous with total, deadpan calm.",
+  "Hyperbole: blow the small thing up to legendary, mythic scale.",
+  "Running gag: plant a silly phrase early, then bring it back bigger in the chorus and the outro.",
+  "Unexpected turn: set up an ordinary line, then swerve somewhere ridiculous.",
+  "Deadpan: deliver the most ridiculous lines like they're simply obvious facts.",
+  "Specific detail: invent tiny, oddly-specific details that feel weirdly true.",
+];
+const COMEDY_NARRATORS = [
+  "an overdramatic nature documentarian",
+  "a booming movie-trailer voice",
+  "a reality-TV confessional to camera",
+  "a sports commentator calling it live",
+  "a wise elder passing down a legend",
+  "an infomercial host who believes far too much",
+  "a superhero origin-story narrator",
+  "a courtroom lawyer making an impassioned case",
+];
+const POP_CULTURE_REFS = [
+  "Jedi mind trick", "main-character energy", "final boss", "plot twist", "glow-up",
+  "side quest", "NPC energy", "speedrun", "canon event", "origin story",
+  "movie-trailer voice", "boss battle", "nature-documentary narration", "reality-TV confessional",
+];
+// Internal creative DNA (never shown, never in output): borrow the ENERGY of the
+// greats, understand WHY they land — never copy, name, imitate a specific song,
+// or reproduce anyone's lyrics.
+const COMEDY_DNA = "Channel the fearless spirit of the great comedy songwriters — the ridiculous imagination and commitment of Weird Al, the absurd escalation of The Lonely Island, the deadpan brilliance of Flight of the Conchords, the clever observation of Bo Burnham, the wit of Tim Minchin, the theatrical over-commitment of Tenacious D, and the warm everyday eye of Trevor Noah. Understand WHY they land — total commitment to a silly idea, unexpected turns, tiny relatable truths, and zero embarrassment. Do NOT copy them, imitate a specific song, name any of them anywhere, or reproduce anyone's lyrics; only borrow that fearless energy. IMPORTANT: several of these acts are edgy or adult — take ONLY their craft, commitment and cleverness, never their content. Every song must stay 100% all-ages clean.";
+function comedyBrief() {
+  const techniques = pickN(COMEDY_TECHNIQUES, 3);
+  const narrator = pickRand(COMEDY_NARRATORS);
+  const refs = pickN(POP_CULTURE_REFS, 3);
+  const spirit = pickN(ALL_TRUTHS, 6);
+  return `COMEDY IS THE #1 JOB (the music must still be great, still rhyme, still make sense — but above all, be genuinely, laugh-out-loud funny, not "AI funny").
+CORE RULE — prioritise HUMAN TRUTHS over pop culture: the tiny, universal, everyday behaviours everyone secretly does. Pop culture makes people RECOGNISE the joke; human truths make people BECOME the joke. Aim for the moment a listener points across the room and yells "THAT'S YOU!" Pile in oddly-specific, painfully-relatable little details.
+DUAL-LAYER, ALL-AGES: it must be humour a KID instantly gets AND that adults genuinely find funny — a shared laugh, layered so both crack up. Squeaky clean, warm and silly, never edgy or adult.
+${COMEDY_DNA}
+HUMAN-TRUTH SPIRIT — these show the flavour and calibrate your comedic eye: ${spirit.join("; ")}. Mine your subject for oddly-specific, painfully-relatable detail, and invent fresh observations we haven't listed.
+Write it in the voice of ${narrator}.
+Lean on at least two of these comic techniques (never name them):
+${techniques.map((t) => "- " + t).join("\n")}
+You MAY sprinkle a couple of these as light seasoning, never the whole joke: ${refs.join(", ")}.
+Never stop at the first funny idea — push it, then push it again, then once more. The chorus must be a big, addictive, shout-along hook that makes someone grin before it finishes.
+Before you finish, silently check: would a kid laugh AND would an adult? is it surprising and original (not a joke we've all heard)? is the chorus addictive? is it squeaky clean? does it avoid sounding AI-generated? would someone screenshot and share it? If any answer is "no", rewrite until it's "yes".`;
+}
+
+function topicLyricBrief({ topic, genre, locale }) {
+  const flavour = localeFlavour(locale);
+  const d = buildLyricDirection("funny");
+  // Rotate the song's shape: sometimes ONE theme committed + escalated, sometimes
+  // a "we all do this" slice-of-life montage of several truths under one chorus.
+  const medley = Math.random() < 0.4;
+  const extra = medley ? pickN(ALL_TRUTHS.filter((t) => t !== topic), 4) : [];
+  const premise = medley
+    ? `SLICE-OF-LIFE MODE: a funny "we all secretly do this" song about everyday life. Weave these true little moments together under ONE unifying, shout-along chorus about how gloriously relatable we all are:\n- ${topic}\n${extra.map((t) => "- " + t).join("\n")}\nLet the verses hop between them; the chorus is the glue that ties it into one song.`
+    : `SINGLE-THEME MODE: the whole song is about ONE thing — ${topic} — and nothing else. Build a little story that ESCALATES across the verses (funnier and more out of hand each time), and make the CHORUS one repeatable, shout-along hook all about this exact thing. Don't wander.`;
+  return `You are the funniest songwriter alive. Write a STANDALONE, laugh-out-loud comedy song — original ${genre || "pop"}. No specific real person; everyday life is the star, so go wild celebrating and gently roasting it.
+${premise}${flavour ? "\n" + flavour : ""}
+
+${comedyBrief()}
+
+CRAFT:
+${LYRIC_CORE_RULES}
+${LINE_FLOW}
+- Structure/shape for this one: ${d.shape.prompt}
+${POP_CULTURE_SEASONING}
+${SURPRISE_SAFETY}
+
+FORMAT: section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]); roughly 16 to 26 lines; clean, no explicit content. Output ONLY the lyrics with the section tags. Nothing else.`;
+}
+
 function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave, locale }) {
   const first = (names || "").split(/[,&]| and /i)[0].trim() || (names || "them");
   const feel = vibeFeel(vibe);
   const flavour = localeFlavour(locale);
   const d = buildLyricDirection(vibe);
   const surprise = (normStyle(vibe) === "surprise me")
-    ? `\n\nSURPRISE ME — make this one delightfully unexpected and shareable. Frame the song around this angle, adapting it to the real details about them (they stay the loved hero, never the punchline): ${pickSurpriseAngle(locale)}.\n${POP_CULTURE_SEASONING}\n${SURPRISE_SAFETY}`
+    ? `\n\nSURPRISE ME — a funny, shareable song that revolves around THIS person; their tiny habits become mythology. Frame it around this comic angle, adapting it to the real details about them (they're the loved hero, never the punchline): ${pickSurpriseAngle(locale)}.\n\n${comedyBrief()}\n${POP_CULTURE_SEASONING}\n${SURPRISE_SAFETY}`
     : "";
   const mix = /with a touch of/i.test(genre || "")
     ? `This blends two styles: about 70% the primary with subtle influence from the second, cohesive, never switching styles between sections. `
@@ -427,8 +686,9 @@ Output ONLY the lyrics with the section tags. Nothing else.`;
 
 async function writeLyrics(input) {
   try {
-    if (LYRICS_PROVIDER === "openai") return await lyricsOpenAI(lyricBrief(input));
-    if (LYRICS_PROVIDER === "anthropic") return await lyricsAnthropic(lyricBrief(input));
+    const brief = input.surpriseTopic ? topicLyricBrief(input) : lyricBrief(input);
+    if (LYRICS_PROVIDER === "openai") return await lyricsOpenAI(brief);
+    if (LYRICS_PROVIDER === "anthropic") return await lyricsAnthropic(brief);
   } catch (e) { console.error("lyrics failed (Suno will write them instead):", e.message); }
   return null;
 }
@@ -502,7 +762,7 @@ async function runGenerate(req) {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   if (!rateOk(ip)) throw genErr(429, { error: "Too many songs from this connection, please slow down a bit." });
 
-  const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint, locale } = req.body || {};
+  const { title, genre, genre2, bandChoice, voice, prompt, lyrics, mustHave, names, about, category, mood, vibe, pronounce, fingerprint, locale, surpriseTopic } = req.body || {};
   const primary = mood || genre;
   const isBandChoice = !!bandChoice || normStyle(primary) === "bands choice";
   const influenceName = (genre2 && !isBandChoice) ? genre2 : "";
@@ -516,7 +776,13 @@ async function runGenerate(req) {
   const styleNudge = ", true to the style with a few tasteful, unexpected production touches";
   const tags = primaryStyle + influence + vibeTag(vibe) + voiceTag + styleNudge;
   const lyricGenre = isBandChoice ? "" : (influenceName ? `${primary} with a touch of ${influenceName}` : primary);
-  const fullPrompt = buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
+  // Surprise Me (one tap, no person): the band writes a standalone, hilarious
+  // song about a random fun topic. Otherwise build the usual person/story prompt.
+  const topic = surpriseTopic ? pickSurpriseTopic(locale) : "";
+  const songTitle = surpriseTopic ? topic : title;
+  const fullPrompt = surpriseTopic
+    ? `A hilarious, clever, slightly corny standalone song all about: ${topic}. Have a blast with the topic itself; there is no specific person.`
+    : buildSongPrompt({ names, about, category, mood: isBandChoice ? "" : primary, fallback: prompt, bandChoice: isBandChoice, genre2: influenceName });
   if (!fullPrompt) throw genErr(400, { error: "Missing prompt" });
 
   // --- entitlement: claim ONE song server-side (paid credit or a free song,
@@ -541,12 +807,12 @@ async function runGenerate(req) {
     // Write the words first (locks the name into every chorus). Falls back to
     // Suno's own lyrics if LYRICS_PROVIDER is off or the call fails.
     let finalLyrics = lyrics;
-    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: lyricGenre, category, vibe, pronounce, mustHave, locale });
+    if (!finalLyrics && LYRICS_PROVIDER !== "off") finalLyrics = await writeLyrics({ names, about, genre: lyricGenre, category, vibe, pronounce, mustHave, locale, surpriseTopic, topic });
 
     let out;
-    if (PROVIDER === "apiframe")        out = await viaApiframe({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
-    else if (PROVIDER === "selfhost")   out = await viaSelfHost({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
-    else if (PROVIDER === "thirdparty") out = await viaThirdParty({ title, tags, prompt: fullPrompt, lyrics: finalLyrics });
+    if (PROVIDER === "apiframe")        out = await viaApiframe({ title: songTitle, tags, prompt: fullPrompt, lyrics: finalLyrics });
+    else if (PROVIDER === "selfhost")   out = await viaSelfHost({ title: songTitle, tags, prompt: fullPrompt, lyrics: finalLyrics });
+    else if (PROVIDER === "thirdparty") out = await viaThirdParty({ title: songTitle, tags, prompt: fullPrompt, lyrics: finalLyrics });
     else                                out = await viaDemo();
 
     if (!out || !out.audioUrl) throw new Error("No audio returned");
@@ -557,7 +823,7 @@ async function runGenerate(req) {
     let status = null, savedId = null;
     if (accounts.accountsEnabled() && req.user) {
       const saved = await accounts.recordSong(req.user.id, {
-        title, genre: mood || genre, names,
+        title: songTitle, genre: mood || genre, names,
         audioUrl: out.audioUrl, imageUrl: out.imageUrl, isFree: mode === "free",
       });
       if (saved) {
@@ -568,7 +834,7 @@ async function runGenerate(req) {
       }
       status = await accounts.statusFor(req.user.id, fingerprint);
     }
-    return { ...out, savedId, provider: PROVIDER, status };
+    return { ...out, savedId, provider: PROVIDER, status, title: songTitle };
   } catch (err) {
     // our failure, not theirs: give the song back
     if (accounts.accountsEnabled() && req.user) {
