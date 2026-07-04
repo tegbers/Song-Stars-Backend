@@ -1427,5 +1427,96 @@ app.post("/api/pay/webhook", async (req, res) => {
   res.sendStatus(200); // always 200 so the provider doesn't retry-storm
 });
 
+/* ============================================================
+   SHARE PAGE (server-rendered) — /s?a=<audio>&t=<title>&n=<name>&i=<cover>
+   Emits per-song Open Graph / Twitter tags so a link pasted into WhatsApp,
+   iMessage, Facebook, X, etc. shows a rich card (cover art + name) instead of
+   a bare grey link. Humans get the same lovely spinning-vinyl player as s.html.
+   Reached in production via the branded proxy bandinyourhand.store/song.
+   ============================================================ */
+const SHARE_SITE = "https://bandinyourhand.store";
+function shHtml(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])); }
+function shUrl(u){ u = String(u == null ? "" : u).trim(); return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : ""; }
+const SHARE_STYLE = `<style>
+  :root{--cream:#FFF7EC;--butter:#FFE7A6;--coral:#FF5C6E;--navy:#1D1B2E;--card:#FFFFFF;--muted:#6B6780;--line:#EFE7D8;}
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--navy);
+    background:radial-gradient(1200px 600px at 50% -10%,#FFEFC9 0%,transparent 60%),linear-gradient(180deg,var(--cream),#FDEFD8);
+    min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 18px calc(24px + env(safe-area-inset-bottom));}
+  .wrap{width:100%;max-width:420px;text-align:center}
+  .kicker{font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--coral);text-transform:uppercase;margin:0 0 6px}
+  h1{font-size:26px;line-height:1.15;margin:0 0 4px} .who{color:var(--muted);font-size:15px;margin:0 0 22px}
+  .stage{position:relative;width:230px;height:230px;margin:0 auto 22px}
+  .vinyl{position:absolute;inset:0;border-radius:50%;background:repeating-radial-gradient(circle at 50% 50%,#23202f 0 3px,#191723 3px 6px);
+    box-shadow:0 18px 40px rgba(29,27,46,.28);animation:spin 6s linear infinite;animation-play-state:paused;display:flex;align-items:center;justify-content:center;}
+  .vinyl.spinning{animation-play-state:running}
+  .label{width:120px;height:120px;border-radius:50%;background:var(--butter);border:6px solid #fff;background-size:cover;background-position:center;
+    display:flex;align-items:center;justify-content:center;font-size:44px;box-shadow:inset 0 0 0 2px rgba(0,0,0,.05);}
+  .hole{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--cream);box-shadow:inset 0 0 0 2px rgba(0,0,0,.1)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .play{-webkit-appearance:none;appearance:none;border:none;cursor:pointer;width:74px;height:74px;border-radius:50%;background:var(--coral);color:#fff;
+    font-size:30px;line-height:1;box-shadow:0 10px 24px rgba(255,92,110,.45);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;transition:transform .1s ease;}
+  .play:active{transform:scale(.94)} .time{font-size:12px;color:var(--muted);margin:0 0 22px;min-height:16px}
+  .cta{display:block;text-decoration:none;font-weight:800;font-size:16px;background:var(--navy);color:#fff;border-radius:16px;padding:16px 18px;box-shadow:0 8px 20px rgba(29,27,46,.22);}
+  .cta small{display:block;font-weight:600;font-size:12px;opacity:.8;margin-top:2px}
+  .foot{margin-top:16px;font-size:12px;color:var(--muted)} .foot b{color:var(--navy)}
+  .scene{font-size:15px;color:var(--muted);min-height:20px;margin:0 0 14px}
+</style>`;
+function sharePage(req, res){
+  const audio = shUrl(req.query.a), image = shUrl(req.query.i);
+  const title = String(req.query.t || "").slice(0, 120);
+  const name  = String(req.query.n || "").slice(0, 80);
+  const ogTitle = title ? ("🎵 “" + title + "”") : (name ? ("🎵 A song for " + name) : "🎵 A Band in Your Hand song");
+  const ogDesc  = name ? ("Someone turned " + name + " into a song. Tap to listen — then make your own, free 💛") : "Someone turned a person they love into a song. Tap to listen — then make your own, free 💛";
+  const ogImage = image || (SHARE_SITE + "/icon-512.png");
+  const shareUrl = SHARE_SITE + "/song?" + new URLSearchParams({ ...(audio?{a:audio}:{}), ...(title?{t:title}:{}), ...(name?{n:name}:{}), ...(image?{i:image}:{}) }).toString();
+  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/>"
+    + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/>"
+    + "<title>" + shHtml(ogTitle) + "</title>"
+    + "<meta property=\"og:type\" content=\"music.song\"/>"
+    + "<meta property=\"og:site_name\" content=\"Band in Your Hand\"/>"
+    + "<meta property=\"og:title\" content=\"" + shHtml(ogTitle) + "\"/>"
+    + "<meta property=\"og:description\" content=\"" + shHtml(ogDesc) + "\"/>"
+    + "<meta property=\"og:image\" content=\"" + shHtml(ogImage) + "\"/>"
+    + "<meta property=\"og:url\" content=\"" + shHtml(shareUrl) + "\"/>"
+    + (audio ? ("<meta property=\"og:audio\" content=\"" + shHtml(audio) + "\"/>") : "")
+    + "<meta name=\"twitter:card\" content=\"summary_large_image\"/>"
+    + "<meta name=\"twitter:title\" content=\"" + shHtml(ogTitle) + "\"/>"
+    + "<meta name=\"twitter:description\" content=\"" + shHtml(ogDesc) + "\"/>"
+    + "<meta name=\"twitter:image\" content=\"" + shHtml(ogImage) + "\"/>"
+    + "<meta name=\"theme-color\" content=\"#FFF7EC\"/>"
+    + SHARE_STYLE
+    + "</head><body><div class=\"wrap\">"
+    + "<p class=\"kicker\">🎵 A Band in Your Hand song</p>"
+    + "<h1 id=\"title\">" + shHtml(title ? ("“" + title + "”") : "Their song") + "</h1>"
+    + "<p class=\"who\" id=\"who\">" + shHtml(name ? ("A song for " + name) : "") + "</p>"
+    + "<div class=\"stage\"><div class=\"vinyl\" id=\"vinyl\"><div class=\"label\" id=\"label\"" + (image ? (" style=\"background-image:url(&quot;" + shHtml(image) + "&quot;)\"") : "") + ">" + (image ? "" : "🎶") + "</div></div><div class=\"hole\"></div></div>"
+    + "<button class=\"play\" id=\"play\" aria-label=\"Play\">▶</button>"
+    + "<p class=\"time\" id=\"time\">" + (audio ? "tap to play" : "") + "</p>"
+    + "<p class=\"scene\" id=\"scene\"></p>"
+    + "<a class=\"cta\" href=\"" + SHARE_SITE + "\">Make your own 🎶<small>Turn someone you love into a song</small></a>"
+    + "<p class=\"foot\">Made with <b>Band in Your Hand</b> · your first two are free 💛</p>"
+    + "</div>"
+    + (audio ? ("<audio id=\"audio\" preload=\"none\" playsinline src=\"" + shHtml(audio) + "\"></audio>") : "")
+    + "<script>(function(){var a=" + JSON.stringify(audio || "") + ";"
+    + "var play=document.getElementById('play'),time=document.getElementById('time'),vinyl=document.getElementById('vinyl'),scene=document.getElementById('scene'),audio=document.getElementById('audio');"
+    + "var scenes=['📻 turn it up','💿 spinning just for you','🎧 press play, thank us later','🥁 Boom laid down the beat','🎤 Lola gave it everything','✍️ Penny wrote the words'];"
+    + "var si=Math.floor(Math.random()*scenes.length);scene.textContent=scenes[si];setInterval(function(){si=(si+1)%scenes.length;scene.textContent=scenes[si];},3200);"
+    + "function fmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}"
+    + "if(!a&&play){play.style.display='none';}"
+    + "if(play&&audio){play.addEventListener('click',function(){if(audio.paused){audio.play();}else{audio.pause();}});"
+    + "audio.addEventListener('play',function(){play.textContent='⏸';vinyl.classList.add('spinning');});"
+    + "audio.addEventListener('pause',function(){play.textContent='▶';vinyl.classList.remove('spinning');});"
+    + "audio.addEventListener('ended',function(){play.textContent='▶';vinyl.classList.remove('spinning');time.textContent='play it again? 🔁';});"
+    + "audio.addEventListener('timeupdate',function(){if(audio.duration)time.textContent=fmt(audio.currentTime)+' / '+fmt(audio.duration);});"
+    + "audio.addEventListener('loadedmetadata',function(){time.textContent='0:00 / '+fmt(audio.duration);});}"
+    + "})();</script></body></html>";
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "public, max-age=300");
+  res.send(html);
+}
+app.get("/s", sharePage);
+app.get("/song", sharePage);
+
 app.get("/", (_req, res) => res.send(`Song Stars backend · songs:${PROVIDER} · pay:${PAY_PROVIDER}`));
 app.listen(PORT, () => console.log(`🎵 Song Stars backend on :${PORT} (songs:${PROVIDER}, pay:${PAY_PROVIDER})`));
