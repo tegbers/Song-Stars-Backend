@@ -117,6 +117,8 @@ const STYLES = {
   "hard rock": "Hard rock around 132 BPM. Heavy distorted power-chord guitars, screaming lead-guitar solos, pounding live drums, driving bass. Strong gritty lead vocal with gang-vocal shouts on the chorus. Loud, punchy, powerful production.",
   "metal": "Metal around 140 BPM. Heavy palm-muted down-tuned guitars, fast double-kick drums, aggressive riffs, deep driving bass, shredding solos. Powerful intense lead vocal with a big anthemic chorus. Massive, tight, modern metal production.",
   "punk": "Punk rock around 165 BPM. Fast buzzy distorted guitars, simple driving power chords, breakneck drums, punchy bass, shouted gang vocals. Raw, energetic, snappy lead vocal. Loud, fast, garage-energy production.",
+  "kids tv theme": "Kids' TV show theme around 128 BPM. Bright bouncy synths, cheerful ukulele and piano, playful percussion, hand-claps, glockenspiel sparkles, upbeat bass. A big, simple, sing-along title-theme chorus with a hook kids repeat instantly. Warm friendly lead vocal with excited children's gang vocals and call-and-response. Cheerful, colourful, wholesome, impossibly catchy.",
+  "youtube kids": "Modern kids YouTube singalong around 120 BPM. Bubbly nursery-pop synths, plucky marimba, bright piano, claps, playful sound-effects, gentle four-on-the-floor beat. An ultra-catchy repetitive hook built for singing along. Sweet cheerful lead vocal with layered kids' backing vocals. Squeaky-clean, joyful, playful-learning energy.",
 };
 function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
@@ -794,6 +796,20 @@ async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
    store; the 5-min TTL is just cleanup, well past any realistic retry window. */
 const genIdem = new Map(); // requestId -> Promise<payload>
 
+/* Soft daily generation ceiling. A runaway/viral day — or an abuse burst — can
+   otherwise quietly drain the Suno balance in a few hours. GEN_DAILY_CAP is the
+   max songs generated per day (0 or unset = no cap). Reserves a slot only when
+   we're actually about to generate, so failed/blocked requests don't waste it. */
+let genDay = "", genCount = 0;
+function genDailyOk() {
+  const CAP = parseInt(process.env.GEN_DAILY_CAP || "0", 10);
+  if (!CAP || CAP <= 0) return true;
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== genDay) { genDay = today; genCount = 0; }
+  if (genCount >= CAP) return false;
+  genCount++; return true;
+}
+
 app.post("/api/generate", accounts.requireAuth, async (req, res) => {
   const requestId = req.body && req.body.requestId;
   if (requestId && genIdem.has(requestId)) {
@@ -857,6 +873,16 @@ async function runGenerate(req) {
     }
   }
 
+  // Daily cost ceiling: if the studio's maxed out for today, hand the just-claimed
+  // song back (so nothing is spent) and gently ask them to come back tomorrow.
+  if (!genDailyOk()) {
+    if (accounts.accountsEnabled() && req.user) {
+      if (mode === "pass") await accounts.releasePassSong(req.user.id);
+      else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
+    }
+    throw genErr(503, { error: "studio_busy", message: "Our little studio is at capacity for today — even the band needs a rest! Nothing was used. Try again tomorrow and your song will be waiting 💛" });
+  }
+
   try {
     // Write the words first (locks the name into every chorus). Falls back to
     // Suno's own lyrics if LYRICS_PROVIDER is off or the call fails.
@@ -896,7 +922,7 @@ async function runGenerate(req) {
       else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
     }
     console.error("generate failed:", err.message);
-    throw genErr(502, { error: "Generation failed", detail: err.message });
+    throw genErr(502, { error: "song_failed", message: "The band hit a snag and couldn’t finish that one — nothing was used, so your song is still yours to make. Give it another go in a moment 🎸", detail: err.message });
   }
 }
 
