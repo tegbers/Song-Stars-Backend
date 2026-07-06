@@ -1210,13 +1210,20 @@ function stripEmoji(s = "") { return s.replace(/[^\w &/-]/g, "").trim(); }
 // nothing breaks if the env is unset. Set PAY_PROVIDER=payfast + PAYFAST_* to take real/sandbox payments.
 const PAY_PROVIDER = (process.env.PAY_PROVIDER || "demo");
 
+/* PayFast/PHP-compatible urlencode. Like encodeURIComponent but ALSO encodes ()!*'~
+   and spaces as "+", so our signature byte-matches PayFast's PHP urlencode. Without
+   this, any value with brackets (e.g. "Studio Pass (1 month)") fails signature checks. */
+function pfUrlEncode(v) {
+  return encodeURIComponent(String(v).trim()).replace(/%20/g, "+")
+    .replace(/[!'()*~]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
 /* PayFast requires an md5 signature of the fields (in order) + your passphrase. */
 function payfastSignature(fields, passphrase) {
   let str = Object.keys(fields)
     .filter((k) => fields[k] !== "" && fields[k] !== undefined && fields[k] !== null)
-    .map((k) => `${k}=${encodeURIComponent(String(fields[k]).trim()).replace(/%20/g, "+")}`)
+    .map((k) => `${k}=${pfUrlEncode(fields[k])}`)
     .join("&");
-  if (passphrase) str += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, "+")}`;
+  if (passphrase) str += `&passphrase=${pfUrlEncode(passphrase)}`;
   return crypto.createHash("md5").update(str).digest("hex");
 }
 
@@ -1249,7 +1256,7 @@ async function verifyPayfastItn(body, req) {
   try {
     const passphrase = process.env.PAYFAST_PASSPHRASE || "";
     const entries = Object.entries(body).filter(([k]) => k !== "signature");
-    const pfEncode = (v) => encodeURIComponent(String(v).trim()).replace(/%20/g, "+");
+    const pfEncode = pfUrlEncode;
     let str = entries.map(([k, v]) => `${k}=${pfEncode(v)}`).join("&");
     if (passphrase) str += `&passphrase=${pfEncode(passphrase)}`;
     const expected = crypto.createHash("md5").update(str).digest("hex");
@@ -1335,7 +1342,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
       };
       // PayFast is strict: the string we SIGN must be byte-identical to the string we SUBMIT.
       // So drop empty fields from BOTH, in the SAME order, with the SAME encoding.
-      const pfEncode = (v) => encodeURIComponent(String(v).trim()).replace(/%20/g, "+");
+      const pfEncode = pfUrlEncode;
       const entries = Object.entries(fields).filter(([, v]) => v !== "" && v !== undefined && v !== null);
       const paramStr = entries.map(([k, v]) => `${k}=${pfEncode(v)}`).join("&");
       const pass = process.env.PAYFAST_PASSPHRASE;
@@ -1409,6 +1416,23 @@ app.post("/api/pay/apple/verify", accounts.requireAuth, async (req, res) => {
     res.json({ accounts: true, granted: result, ...status });
   } catch (e) {
     console.error("apple/verify:", e.message);
+    res.status(400).json({ error: "Could not verify that purchase.", detail: e.message });
+  }
+});
+
+/* Android: the native Google Play Billing flow calls this with the productId +
+   purchaseToken from a completed purchase. We verify it against the Google Play
+   Developer API and grant (credits or Studio Pass) server-side. Idempotent. */
+app.post("/api/pay/google/verify", accounts.requireAuth, async (req, res) => {
+  if (!accounts.accountsEnabled() || !req.user) return res.json({ accounts: false });
+  const { productId, purchaseToken, type, fingerprint } = req.body || {};
+  if (!productId || !purchaseToken) return res.status(400).json({ error: "Missing productId or purchaseToken" });
+  try {
+    const result = await accounts.grantGooglePurchase(req.user.id, { productId, purchaseToken, type });
+    const status = await accounts.statusFor(req.user.id, fingerprint);
+    res.json({ accounts: true, granted: result, ...status });
+  } catch (e) {
+    console.error("google/verify:", e.message);
     res.status(400).json({ error: "Could not verify that purchase.", detail: e.message });
   }
 });
