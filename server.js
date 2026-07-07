@@ -47,13 +47,16 @@ const PORT = process.env.PORT || 8787;
    The client may ask for a packId, but it NEVER sets the amount or
    quantity: both are derived here, so a tampered request can't buy
    more than it pays for. Keep in sync with web PACKS + Apple tiers.
-   Prices in cents (ZAR).  single R18.99 · three R49.99 · album R99.99 · pass R199
+   Prices in cents (ZAR).  WEB ladder: single R18.99 · five R69.99 · ten R119.99
+   iOS/legacy: three R49.99 · album R99.99 · pass R199
    ============================================================ */
 const PACKS = {
-  single:     { qty: 1, cents: 1899,  name: "1 track" },
-  three:      { qty: 3, cents: 4999,  name: "3 tracks" },
-  album:      { qty: 7, cents: 9999,  name: "7 tracks (album)" },
-  studiopass: { qty: 0, cents: 19900, name: "Studio Pass (1 month)", pass: true },
+  single:     { qty: 1,  cents: 1899,  name: "1 song" },
+  five:       { qty: 5,  cents: 6999,  name: "5 songs" },
+  ten:        { qty: 10, cents: 11999, name: "10 songs" },
+  three:      { qty: 3,  cents: 4999,  name: "3 tracks" },
+  album:      { qty: 7,  cents: 9999,  name: "7 tracks (album)" },
+  studiopass: { qty: 0,  cents: 19900, name: "Studio Pass (1 month)", pass: true },
 };
 
 /* Interim abuse guard: cap song generations per IP per window (resets on restart).
@@ -119,6 +122,7 @@ const STYLES = {
   "punk": "Punk rock around 165 BPM. Fast buzzy distorted guitars, simple driving power chords, breakneck drums, punchy bass, shouted gang vocals. Raw, energetic, snappy lead vocal. Loud, fast, garage-energy production.",
   "kids tv theme": "Kids' TV show theme around 128 BPM. Bright bouncy synths, cheerful ukulele and piano, playful percussion, hand-claps, glockenspiel sparkles, upbeat bass. A big, simple, sing-along title-theme chorus with a hook kids repeat instantly. Warm friendly lead vocal with excited children's gang vocals and call-and-response. Cheerful, colourful, wholesome, impossibly catchy.",
   "youtube kids": "Modern kids YouTube singalong around 120 BPM. Bubbly nursery-pop synths, plucky marimba, bright piano, claps, playful sound-effects, gentle four-on-the-floor beat. An ultra-catchy repetitive hook built for singing along. Sweet cheerful lead vocal with layered kids' backing vocals. Squeaky-clean, joyful, playful-learning energy.",
+  "kids anthem": "Big, uplifting kids' anthem around 120 BPM. Punchy piano and bright guitars, a driving four-on-the-floor beat, hand-claps and foot-stomps, soaring strings lifting into the chorus. A huge arms-in-the-air, chant-along chorus a whole class or family can shout together. Confident warm lead vocal with a massive group children's gang-vocal chorus and call-and-response. Empowering, triumphant, feel-good and joyful.",
 };
 function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLowerCase(); }
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
