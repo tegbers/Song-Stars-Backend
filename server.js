@@ -43,7 +43,7 @@ const PROVIDER = (process.env.PROVIDER || "demo").toLowerCase();
 const PORT = process.env.PORT || 8787;
 
 /* ============================================================
-   CANONICAL PACKS — the SERVER's source of truth for price + qty.
+   CANONICAL PACKS, the SERVER's source of truth for price + qty.
    The client may ask for a packId, but it NEVER sets the amount or
    quantity: both are derived here, so a tampered request can't buy
    more than it pays for. Keep in sync with web PACKS + Apple tiers.
@@ -51,12 +51,12 @@ const PORT = process.env.PORT || 8787;
    iOS/legacy: three R49.99 · album R99.99 · pass R199
    ============================================================ */
 const PACKS = {
-  single:     { qty: 1,  cents: 1899,  name: "1 song" },
-  five:       { qty: 5,  cents: 6999,  name: "5 songs" },
+  single:     { qty: 1, cents: 1899, name: "1 song" },
+  five:       { qty: 5, cents: 6999, name: "5 songs" },
   ten:        { qty: 10, cents: 11999, name: "10 songs" },
-  three:      { qty: 3,  cents: 4999,  name: "3 tracks" },
-  album:      { qty: 7,  cents: 9999,  name: "7 tracks (album)" },
-  studiopass: { qty: 0,  cents: 19900, name: "Studio Pass (1 month)", pass: true },
+  three:      { qty: 3, cents: 4999, name: "3 tracks" },
+  album:      { qty: 7, cents: 9999, name: "7 tracks (album)" },
+  studiopass: { qty: 0, cents: 19900, name: "Studio Pass (1 month)", pass: true },
 };
 
 /* Interim abuse guard: cap song generations per IP per window (resets on restart).
@@ -128,7 +128,7 @@ function normStyle(s) { return (s || "").replace(/[^a-z0-9 ]/gi, "").trim().toLo
 function styleFor(s) { return STYLES[normStyle(s)] || normStyle(s) || "pop"; }
 
 /* ------------------------------------------------------------
-   VOICE CHARACTER — make the lead vocal distinct PER GENRE so songs
+   VOICE CHARACTER, make the lead vocal distinct PER GENRE so songs
    don't all land on Suno's default voice. Sound-only descriptors (no
    mood words). A rotating texture is added so even two songs in the
    same genre don't sound identical.
@@ -321,21 +321,21 @@ function buildLyricDirection(vibe) {
 }
 
 /* Light, optional local flavour based on the user's locale (from the browser).
-   Seasoning only — kept subtle so it never turns into forced/cringe slang. */
+   Seasoning only, kept subtle so it never turns into forced/cringe slang. */
 function localeFlavour(locale) {
   const l = (locale || "").toLowerCase();
-  if (/(^|[-_])za$/.test(l) || l.startsWith("af")) return "Lightly season with natural South African English where it genuinely fits the story (a little local warmth, the occasional word like 'lekker' or 'just now') — subtle seasoning, never forced, never a whole line of slang.";
-  if (/(^|[-_])(gb|ie)$/.test(l)) return "Lightly season with natural British/Irish English turns of phrase where they fit — subtle, never forced.";
-  if (/(^|[-_])(au|nz)$/.test(l)) return "Lightly season with natural Australian/New Zealand English where it fits — subtle, never forced.";
+  if (/(^|[-_])za$/.test(l) || l.startsWith("af")) return "Lightly season with natural South African English where it genuinely fits the story (a little local warmth, the occasional word like 'lekker' or 'just now'), subtle seasoning, never forced, never a whole line of slang.";
+  if (/(^|[-_])(gb|ie)$/.test(l)) return "Lightly season with natural British/Irish English turns of phrase where they fit, subtle, never forced.";
+  if (/(^|[-_])(au|nz)$/.test(l)) return "Lightly season with natural Australian/New Zealand English where it fits, subtle, never forced.";
   return "";
 }
 /* ============================================================
-   SURPRISE ME — CONCEPT ENGINE
+   SURPRISE ME, CONCEPT ENGINE
    When the vibe is "Surprise Me" we hand the lyric writer a fun,
    unexpected ANGLE to frame the song around, on top of the usual
    structure variance. Angles are modern, relatable and shareable,
    wrapped lovingly around the REAL person (they stay the hero).
-   Pure data — add/remove freely as new fads land.
+   Pure data, add/remove freely as new fads land.
    SAFETY IS BUILT IN: pop-culture only as light everyday seasoning
    (idioms & formats), never a trademarked world, real celebrities,
    or real song lyrics; always family-safe (no politics, religion,
@@ -379,7 +379,7 @@ const SURPRISE_ANGLES_SEASONAL = {
   11: ["the unstoppable force behind the family's festive-season chaos"],
 };
 const POP_CULTURE_SEASONING = "You MAY sprinkle light, everyday pop-culture seasoning that has entered common speech (e.g. 'Jedi mind trick', 'main-character energy', 'plot twist', 'final boss', 'glow-up', 'speedrun', or telenovela / movie-trailer / nature-documentary styling). Keep it a wink, never the whole song. Do NOT build the song around a trademarked franchise or its characters, do NOT name or impersonate real people or celebrities, and never reproduce real song lyrics.";
-const SURPRISE_SAFETY = "Keep it affectionate and firmly WITH the person, celebrating them — never at their expense, never embarrassing. Family-safe: no politics, religion, tragedy, illness, or real public figures. Any cost-of-living or stay-at-home references stay light and playfully nostalgic (thrifty-hero energy, the banana-bread era, the confused dog when everyone stayed home) — never money stress, sickness or loss. ALL-AGES IS THE BAR: it must make an 8-year-old AND their mum laugh together — squeaky clean, no innuendo, no crude, edgy or adult humour, nothing you couldn't sing at a kid's birthday party. The funny comes from warmth, silliness and relatable truth, never from edge.";
+const SURPRISE_SAFETY = "Keep it affectionate and firmly WITH the person, celebrating them, never at their expense, never embarrassing. Family-safe: no politics, religion, tragedy, illness, or real public figures. Any cost-of-living or stay-at-home references stay light and playfully nostalgic (thrifty-hero energy, the banana-bread era, the confused dog when everyone stayed home), never money stress, sickness or loss. ALL-AGES IS THE BAR: it must make an 8-year-old AND their mum laugh together, squeaky clean, no innuendo, no crude, edgy or adult humour, nothing you couldn't sing at a kid's birthday party. The funny comes from warmth, silliness and relatable truth, never from edge.";
 function pickSurpriseAngle(locale) {
   let pool = SURPRISE_ANGLES_UNIVERSAL.slice();
   const l = (locale || "").toLowerCase();
@@ -390,25 +390,25 @@ function pickSurpriseAngle(locale) {
 }
 
 /* ============================================================
-   SURPRISE ME (one tap, NO person) — TOPIC ENGINE
+   SURPRISE ME (one tap, NO person), TOPIC ENGINE
    The home "Surprise me" button makes a random, standalone, laugh-out-loud
    song about a fun TOPIC (no name needed). Pure hook: contemporary, clever,
-   a bit corny, endlessly shareable. Data only — add fads freely. Same safety
+   a bit corny, endlessly shareable. Data only, add fads freely. Same safety
    + pop-culture tiering as the angle engine.
    ============================================================ */
-/* HUMAN TRUTHS — the gold. Tiny universal behaviours everyone secretly does.
+/* HUMAN TRUTHS, the gold. Tiny universal behaviours everyone secretly does.
    The engine favours these over pop culture: the bullseye is a listener pointing
    across the room going "THAT'S YOU!" Add freely. */
 const HUMAN_TRUTHS = [
   "hitting snooze with sniper accuracy while completely unconscious, then missing every other alarm",
   "solving every life problem in the shower, then forgetting all of it before the towel",
   "being physically unable to speak before the first coffee",
-  "a password needing an uppercase, a number, a symbol and a childhood fear — then forgetting it instantly",
+  "a password needing an uppercase, a number, a symbol and a childhood fear, then forgetting it instantly",
   "everyone secretly pretending they know how to fold a fitted sheet",
-  "going in for milk and leaving with candles, chips, batteries and a kayak — but no milk",
+  "going in for milk and leaving with candles, chips, batteries and a kayak, but no milk",
   "hunting for your phone using the flashlight on your phone",
   "searching the whole couch, then accusing the kids, who were holding the remote",
-  "'I know a quicker way' — arriving forty-two minutes late",
+  "'I know a quicker way', arriving forty-two minutes late",
   "owning seventeen charging cables and not one of them fits",
   "hitting 2% battery and suddenly becoming the fastest texter alive",
   "opening the fridge, closing it, opening it again hoping food has appeared",
@@ -419,7 +419,7 @@ const HUMAN_TRUTHS = [
   "turning the TV volume down so you can taste the food better",
   "car keys vanishing inside your own house, then reappearing in your hand",
   "the one sock that disappears in the wash and is never seen again",
-  "packing for rain, snow, safari and dinner with royalty — for a two-day trip",
+  "packing for rain, snow, safari and dinner with royalty, for a two-day trip",
   "washing the car so it starts raining immediately",
   "always, somehow, choosing the slowest queue",
   "never trusting the microwave, stopping it at one second, every single time",
@@ -427,14 +427,14 @@ const HUMAN_TRUTHS = [
   "'I'm only having one spoon' and the whole tub is gone",
   "driving eighteen kilometres to save four rand on petrol",
   "getting genuinely thrilled about a new vacuum, socks on special, or working Wi-Fi",
-  "'I'll remember that' — never, ever remembering",
+  "'I'll remember that', never, ever remembering",
   "procrastination: proudly making it tomorrow's problem",
   "impossible to wake at 5am for work, wide awake at 4:58am for a holiday",
   "picking up the phone, forgetting why, putting it down, instantly remembering",
-  "'I don't want fries' — then eating half of yours",
+  "'I don't want fries', then eating half of yours",
   "the thermostat war: one person freezing, one boiling, neither ever compromising",
   "the meeting ends and immediately the real meeting begins in the car park",
-  "turning your phone face-down so nobody knows you're ignoring them — while ignoring them",
+  "turning your phone face-down so nobody knows you're ignoring them, while ignoring them",
   "reading a message, replying to it perfectly in your head, never actually replying",
   "unlocking your phone to do one thing, forgetting it, checking Instagram instead",
   "taking twenty photos to keep exactly one",
@@ -479,7 +479,7 @@ const HUMAN_TRUTHS = [
   "the child ignoring the gift to play with the cardboard box",
   "suddenly needing the toilet the exact moment you leave the house",
 ];
-/* LEVEL 2 — GENERATIONAL TRUTHS (recognisable to a generation). */
+/* LEVEL 2, GENERATIONAL TRUTHS (recognisable to a generation). */
 const GENERATIONAL_TRUTHS = [
   "the screech of dial-up internet and the patience it demanded",
   "MSN Messenger nudges and cryptic away-message feelings",
@@ -492,7 +492,7 @@ const GENERATIONAL_TRUTHS = [
   "rewinding the tape before returning it, purely out of honour",
   "blowing into a game cartridge to make it work",
 ];
-/* LEVEL 3 — CULTURAL TRUTHS (locale-flavoured; only surfaced when it fits). */
+/* LEVEL 3, CULTURAL TRUTHS (locale-flavoured; only surfaced when it fits). */
 const CULTURAL_TRUTHS = [
   "braai etiquette and the sacred question of who holds the tongs",
   "the family WhatsApp group and its 274 unread messages",
@@ -500,7 +500,7 @@ const CULTURAL_TRUTHS = [
   "a Sunday lunch cooked to feed a small village",
   "the great road-trip snack negotiation",
   "petrol-price panic and the detour to save four rand",
-  "'just now' versus 'now-now' — a national timing mystery",
+  "'just now' versus 'now-now', a national timing mystery",
   "rationing the last of the biltong like buried treasure",
   "amapiano quietly taking over every family gathering",
   "waiting at the robot that everyone else calls a traffic light",
@@ -511,7 +511,7 @@ const ALL_TRUTHS = HUMAN_TRUTHS.concat(GENERATIONAL_TRUTHS, CULTURAL_TRUTHS);
 const SURPRISE_TOPICS_UNIVERSAL = [
   "dad jokes so bad they loop back to funny",
   "the family group chat at 2am",
-  "'you're on mute' — the eternal video-call anthem",
+  "'you're on mute', the eternal video-call anthem",
   "running out of data at the worst possible moment",
   "Monday morning versus the snooze button",
   "the office coffee machine and its secret power over us all",
@@ -552,7 +552,7 @@ const SURPRISE_TOPICS_UNIVERSAL = [
 ];
 const SURPRISE_TOPICS_ZA = [
   "braai tongs and the men sworn to guard them",
-  "'just now' — a great South African mystery",
+  "'just now', a great South African mystery",
   "the heroic saga of surviving load-shedding",
   "amapiano quietly taking over every family gathering",
 ];
@@ -571,7 +571,7 @@ function pickSurpriseTopic(locale) {
    Comedy is the #1 job. We rotate a narrator voice + a few comic
    techniques + light pop-culture seasoning, and end with a silent
    quality-control pass, so no two surprises feel like cousins.
-   Pure data — extend the banks freely.
+   Pure data, extend the banks freely.
    ============================================================ */
 function pickN(arr, n) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, n); }
 const COMEDY_TECHNIQUES = [
@@ -602,29 +602,29 @@ const POP_CULTURE_REFS = [
   "movie-trailer voice", "boss battle", "nature-documentary narration", "reality-TV confessional",
 ];
 // Internal creative DNA (never shown, never in output): borrow the ENERGY of the
-// greats, understand WHY they land — never copy, name, imitate a specific song,
+// greats, understand WHY they land, never copy, name, imitate a specific song,
 // or reproduce anyone's lyrics.
-const COMEDY_DNA = "Channel the fearless spirit of the great comedy songwriters — the ridiculous imagination and commitment of Weird Al, the absurd escalation of The Lonely Island, the deadpan brilliance of Flight of the Conchords, the clever observation of Bo Burnham, the wit of Tim Minchin, the theatrical over-commitment of Tenacious D, and the warm everyday eye of Trevor Noah. Understand WHY they land — total commitment to a silly idea, unexpected turns, tiny relatable truths, and zero embarrassment. Do NOT copy them, imitate a specific song, name any of them anywhere, or reproduce anyone's lyrics; only borrow that fearless energy. IMPORTANT: several of these acts are edgy or adult — take ONLY their craft, commitment and cleverness, never their content. Every song must stay 100% all-ages clean.";
+const COMEDY_DNA = "Channel the fearless spirit of the great comedy songwriters, the ridiculous imagination and commitment of Weird Al, the absurd escalation of The Lonely Island, the deadpan brilliance of Flight of the Conchords, the clever observation of Bo Burnham, the wit of Tim Minchin, the theatrical over-commitment of Tenacious D, and the warm everyday eye of Trevor Noah. Understand WHY they land, total commitment to a silly idea, unexpected turns, tiny relatable truths, and zero embarrassment. Do NOT copy them, imitate a specific song, name any of them anywhere, or reproduce anyone's lyrics; only borrow that fearless energy. IMPORTANT: several of these acts are edgy or adult, take ONLY their craft, commitment and cleverness, never their content. Every song must stay 100% all-ages clean.";
 function comedyBrief() {
   const techniques = pickN(COMEDY_TECHNIQUES, 3);
   const narrator = pickRand(COMEDY_NARRATORS);
   const refs = pickN(POP_CULTURE_REFS, 3);
   const spirit = pickN(ALL_TRUTHS, 6);
-  return `COMEDY IS THE #1 JOB (the music must still be great, still rhyme, still make sense — but above all, be genuinely, laugh-out-loud funny, not "AI funny").
-CORE RULE — prioritise HUMAN TRUTHS over pop culture: the tiny, universal, everyday behaviours everyone secretly does. Pop culture makes people RECOGNISE the joke; human truths make people BECOME the joke. Aim for the moment a listener points across the room and yells "THAT'S YOU!" Pile in oddly-specific, painfully-relatable little details.
-DUAL-LAYER, ALL-AGES: it must be humour a KID instantly gets AND that adults genuinely find funny — a shared laugh, layered so both crack up. Squeaky clean, warm and silly, never edgy or adult.
+  return `COMEDY IS THE #1 JOB (the music must still be great, still rhyme, still make sense, but above all, be genuinely, laugh-out-loud funny, not "AI funny").
+CORE RULE, prioritise HUMAN TRUTHS over pop culture: the tiny, universal, everyday behaviours everyone secretly does. Pop culture makes people RECOGNISE the joke; human truths make people BECOME the joke. Aim for the moment a listener points across the room and yells "THAT'S YOU!" Pile in oddly-specific, painfully-relatable little details.
+DUAL-LAYER, ALL-AGES: it must be humour a KID instantly gets AND that adults genuinely find funny, a shared laugh, layered so both crack up. Squeaky clean, warm and silly, never edgy or adult.
 ${COMEDY_DNA}
-HUMAN-TRUTH SPIRIT — these show the flavour and calibrate your comedic eye: ${spirit.join("; ")}. Mine your subject for oddly-specific, painfully-relatable detail, and invent fresh observations we haven't listed.
+HUMAN-TRUTH SPIRIT, these show the flavour and calibrate your comedic eye: ${spirit.join("; ")}. Mine your subject for oddly-specific, painfully-relatable detail, and invent fresh observations we haven't listed.
 Write it in the voice of ${narrator}.
 Lean on at least two of these comic techniques (never name them):
 ${techniques.map((t) => "- " + t).join("\n")}
 You MAY sprinkle a couple of these as light seasoning, never the whole joke: ${refs.join(", ")}.
-Never stop at the first funny idea — push it, then push it again, then once more.
-CHORUS — this is the money moment: one big, addictive, shout-along hook built around a single killer line (ideally a phrase people could quote back). It should be the FUNNIEST, most repeatable part of the whole song, and land a grin before it finishes. Repeat that hook line; don't rewrite the chorus every time.
-BRIDGE — the bridge must TURN, not just repeat: a fresh angle, a sudden reveal, a confession, or one more escalation that makes the last chorus hit harder ("oh no, it's even worse than we thought"). Never use the bridge as filler.
-WORDPLAY — earn the "clever": lean on puns, double meanings, unexpected internal rhymes and a setup-then-swerve. Rhymes should feel surprising and effortless, never forced or nursery-rhyme obvious.
-BUTTON — end on a strong closing line that lands the joke one final time (a punchline, a callback, or a tiny twist), so the song finishes on a laugh, not a fade.
-NO FILLER — every single line must carry a joke, a vivid image, or an escalation. Cut any line that's just there to rhyme.
+Never stop at the first funny idea, push it, then push it again, then once more.
+CHORUS, this is the money moment: one big, addictive, shout-along hook built around a single killer line (ideally a phrase people could quote back). It should be the FUNNIEST, most repeatable part of the whole song, and land a grin before it finishes. Repeat that hook line; don't rewrite the chorus every time.
+BRIDGE, the bridge must TURN, not just repeat: a fresh angle, a sudden reveal, a confession, or one more escalation that makes the last chorus hit harder ("oh no, it's even worse than we thought"). Never use the bridge as filler.
+WORDPLAY, earn the "clever": lean on puns, double meanings, unexpected internal rhymes and a setup-then-swerve. Rhymes should feel surprising and effortless, never forced or nursery-rhyme obvious.
+BUTTON, end on a strong closing line that lands the joke one final time (a punchline, a callback, or a tiny twist), so the song finishes on a laugh, not a fade.
+NO FILLER, every single line must carry a joke, a vivid image, or an escalation. Cut any line that's just there to rhyme.
 Before you finish, silently check: would a kid laugh AND would an adult? is it surprising and original (not a joke we've all heard)? is the chorus addictive and quotable? does the bridge actually turn? is the wordplay genuinely clever? is there a strong closing button? is it squeaky clean? does it avoid sounding AI-generated? would someone screenshot and share it? If any answer is "no", rewrite until it's "yes".`;
 }
 
@@ -637,8 +637,8 @@ function topicLyricBrief({ topic, genre, locale }) {
   const extra = medley ? pickN(ALL_TRUTHS.filter((t) => t !== topic), 4) : [];
   const premise = medley
     ? `SLICE-OF-LIFE MODE: a funny "we all secretly do this" song about everyday life. Weave these true little moments together under ONE unifying, shout-along chorus about how gloriously relatable we all are:\n- ${topic}\n${extra.map((t) => "- " + t).join("\n")}\nLet the verses hop between them; the chorus is the glue that ties it into one song.`
-    : `SINGLE-THEME MODE: the whole song is about ONE thing — ${topic} — and nothing else. Build a little story that ESCALATES across the verses (funnier and more out of hand each time), and make the CHORUS one repeatable, shout-along hook all about this exact thing. Don't wander.`;
-  return `You are the funniest songwriter alive. Write a STANDALONE, laugh-out-loud comedy song — original ${genre || "pop"}. No specific real person; everyday life is the star, so go wild celebrating and gently roasting it.
+    : `SINGLE-THEME MODE: the whole song is about ONE thing, ${topic}, and nothing else. Build a little story that ESCALATES across the verses (funnier and more out of hand each time), and make the CHORUS one repeatable, shout-along hook all about this exact thing. Don't wander.`;
+  return `You are the funniest songwriter alive. Write a STANDALONE, laugh-out-loud comedy song, original ${genre || "pop"}. No specific real person; everyday life is the star, so go wild celebrating and gently roasting it.
 ${premise}${flavour ? "\n" + flavour : ""}
 
 ${comedyBrief()}
@@ -659,7 +659,7 @@ function lyricBrief({ names, about, genre, category, vibe, pronounce, mustHave, 
   const flavour = localeFlavour(locale);
   const d = buildLyricDirection(vibe);
   const surprise = (normStyle(vibe) === "surprise me")
-    ? `\n\nSURPRISE ME — a funny, shareable song that revolves around THIS person; their tiny habits become mythology. Frame it around this comic angle, adapting it to the real details about them (they're the loved hero, never the punchline): ${pickSurpriseAngle(locale)}.\n\n${comedyBrief()}\n${POP_CULTURE_SEASONING}\n${SURPRISE_SAFETY}`
+    ? `\n\nSURPRISE ME, a funny, shareable song that revolves around THIS person; their tiny habits become mythology. Frame it around this comic angle, adapting it to the real details about them (they're the loved hero, never the punchline): ${pickSurpriseAngle(locale)}.\n\n${comedyBrief()}\n${POP_CULTURE_SEASONING}\n${SURPRISE_SAFETY}`
     : "";
   const mix = /with a touch of/i.test(genre || "")
     ? `This blends two styles: about 70% the primary with subtle influence from the second, cohesive, never switching styles between sections. `
@@ -715,7 +715,7 @@ async function writeLyrics(input) {
 
 // Two-model bake-off for Surprise Me: write with Claude Sonnet AND GPT-4o in
 // parallel, then judge which is funnier/most singable and return the winner.
-// Degrades gracefully — if only one model responds, we use it; if the judge
+// Degrades gracefully, if only one model responds, we use it; if the judge
 // fails, we keep the first good candidate.
 async function lyricsBestOf(brief) {
   const results = await Promise.allSettled([
@@ -735,7 +735,7 @@ async function lyricsBestOf(brief) {
   return cands[0].text;
 }
 
-// Cheap, fast judge — picks the funniest, most singable option. Returns index.
+// Cheap, fast judge, picks the funniest, most singable option. Returns index.
 async function judgeLyrics(options) {
   const key = process.env.OPENAI_API_KEY; if (!key) return 0;
   const labelled = options.map((o, i) => `OPTION ${i + 1}:\n${o}`).join("\n\n---\n\n");
@@ -793,14 +793,14 @@ async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
    ------------------------------------------------------------ */
 /* In-memory idempotency for song generation. A single create tap can reach us
    more than once (mobile networks are flaky and a real song takes 30-90s, so the
-   app may decide the request failed and retry). Generating is NOT free — it claims
-   a credit and burns Suno time — so a naive retry made the SAME song several times
+   app may decide the request failed and retry). Generating is NOT free, it claims
+   a credit and burns Suno time, so a naive retry made the SAME song several times
    and charged for each. Keyed by the client's requestId, we run the work once and
    hand every duplicate the exact same result, no extra charge. Single-instance
    store; the 5-min TTL is just cleanup, well past any realistic retry window. */
 const genIdem = new Map(); // requestId -> Promise<payload>
 
-/* Soft daily generation ceiling. A runaway/viral day — or an abuse burst — can
+/* Soft daily generation ceiling. A runaway/viral day, or an abuse burst, can
    otherwise quietly drain the Suno balance in a few hours. GEN_DAILY_CAP is the
    max songs generated per day (0 or unset = no cap). Reserves a slot only when
    we're actually about to generate, so failed/blocked requests don't waste it. */
@@ -884,7 +884,7 @@ async function runGenerate(req) {
       if (mode === "pass") await accounts.releasePassSong(req.user.id);
       else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
     }
-    throw genErr(503, { error: "studio_busy", message: "Our little studio is at capacity for today — even the band needs a rest! Nothing was used. Try again tomorrow and your song will be waiting 💛" });
+    throw genErr(503, { error: "studio_busy", message: "Our little studio is at capacity for today, even the band needs a rest! Nothing was used. Try again tomorrow and your song will be waiting 💛" });
   }
 
   try {
@@ -926,7 +926,7 @@ async function runGenerate(req) {
       else if (mode === "paid" || mode === "free") await accounts.releaseSong(req.user.id, fingerprint, mode);
     }
     console.error("generate failed:", err.message);
-    throw genErr(502, { error: "song_failed", message: "The band hit a snag and couldn’t finish that one — nothing was used, so your song is still yours to make. Give it another go in a moment 🎸", detail: err.message });
+    throw genErr(502, { error: "song_failed", message: "The band hit a snag and couldn’t finish that one, nothing was used, so your song is still yours to make. Give it another go in a moment 🎸", detail: err.message });
   }
 }
 
@@ -969,7 +969,7 @@ app.delete("/api/songs/:id", accounts.requireAuth, async (req, res) => {
 });
 
 /* Permanently delete the signed-in user's account and all their data
-   (App Store Guideline 5.1.1(v) — in-app account deletion). */
+   (App Store Guideline 5.1.1(v), in-app account deletion). */
 app.delete("/api/account", accounts.requireAuth, async (req, res) => {
   if (!accounts.accountsEnabled() || !req.user) return res.status(401).json({ error: "sign_in" });
   try {
@@ -1128,8 +1128,8 @@ async function viaSelfHost({ prompt, tags, lyrics }) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: lyrics || prompt,        // lyrics if provided, else let Suno write them
-      tags,                            // genre/style preset
+      prompt: lyrics || prompt, // lyrics if provided, else let Suno write them
+      tags, // genre/style preset
       title: undefined,
       make_instrumental: false,
       wait_audio: false,
@@ -1247,7 +1247,7 @@ function verifyYocoSignature(req) {
     const signedContent = `${id}.${ts}.${req.rawBody.toString("utf8")}`;
     const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
     const expected = crypto.createHmac("sha256", key).update(signedContent).digest("base64");
-    // header can hold several space-separated "v1,<sig>" values — match any, in constant time.
+    // header can hold several space-separated "v1,<sig>" values, match any, in constant time.
     return sigHeader.split(" ").map((p) => p.split(",")[1]).filter(Boolean).some((p) => {
       try { return crypto.timingSafeEqual(Buffer.from(p), Buffer.from(expected)); } catch { return false; }
     });
@@ -1281,7 +1281,7 @@ app.post("/api/pay/create", accounts.requireAuth, async (req, res) => {
   const { packId, email, kind } = req.body || {};
   const isPass = kind === "pass" || packId === "studiopass";
   // SERVER decides price + quantity from the canonical PACKS table. Any client-sent
-  // amount/qty is ignored — this is what stops "buy 100 credits for 1 cent".
+  // amount/qty is ignored, this is what stops "buy 100 credits for 1 cent".
   const pack = PACKS[isPass ? "studiopass" : packId];
   if (!pack) return res.status(400).json({ error: "Unknown pack" });
   const amount = pack.cents / 100;   // ZAR, used by the provider calls below
@@ -1448,13 +1448,13 @@ app.post("/api/pay/webhook", async (req, res) => {
     let checkoutId, orderId, succeeded, paidCents = null;
 
     if (body.payment_status || body.m_payment_id) {
-      // ---- PayFast ITN (form-encoded) — must pass signature + server-to-server validate.
+      // ---- PayFast ITN (form-encoded), must pass signature + server-to-server validate.
       if (!(await verifyPayfastItn(body, req))) { console.warn("payfast ITN rejected"); return res.sendStatus(200); }
       orderId = body.m_payment_id || body.custom_str1;
       succeeded = /complete/i.test(String(body.payment_status || ""));
       if (body.amount_gross != null) paidCents = Math.round(Number(body.amount_gross) * 100);
     } else {
-      // ---- Yoco webhook (JSON) — must pass HMAC signature.
+      // ---- Yoco webhook (JSON), must pass HMAC signature.
       if (!verifyYocoSignature(req)) { console.warn("yoco webhook rejected"); return res.sendStatus(200); }
       const payload = body.payload || body.data || body;
       checkoutId = payload.id || payload.checkoutId || (payload.metadata && payload.metadata.checkoutId);
@@ -1482,7 +1482,7 @@ app.post("/api/pay/webhook", async (req, res) => {
 });
 
 /* ============================================================
-   SHARE PAGE (server-rendered) — /s?a=<audio>&t=<title>&n=<name>&i=<cover>
+   SHARE PAGE (server-rendered), /s?a=<audio>&t=<title>&n=<name>&i=<cover>
    Emits per-song Open Graph / Twitter tags so a link pasted into WhatsApp,
    iMessage, Facebook, X, etc. shows a rich card (cover art + name) instead of
    a bare grey link. Humans get the same lovely spinning-vinyl player as s.html.
@@ -1521,7 +1521,7 @@ function sharePage(req, res){
   const title = String(req.query.t || "").slice(0, 120);
   const name  = String(req.query.n || "").slice(0, 80);
   const ogTitle = title ? ("🎵 “" + title + "”") : (name ? ("🎵 A song for " + name) : "🎵 A Band in Your Hand song");
-  const ogDesc  = name ? ("Someone turned " + name + " into a song. Tap to listen — then make your own, free 💛") : "Someone turned a person they love into a song. Tap to listen — then make your own, free 💛";
+  const ogDesc  = name ? ("Someone turned " + name + " into a song. Tap to listen, then make your own, free 💛") : "Someone turned a person they love into a song. Tap to listen, then make your own, free 💛";
   const ogImage = image || (SHARE_SITE + "/icon-512.png");
   const shareUrl = SHARE_SITE + "/song?" + new URLSearchParams({ ...(audio?{a:audio}:{}), ...(title?{t:title}:{}), ...(name?{n:name}:{}), ...(image?{i:image}:{}) }).toString();
   const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/>"
