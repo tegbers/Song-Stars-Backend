@@ -12,7 +12,7 @@ const { createClient } = require("@supabase/supabase-js");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const FREE_SONGS = Number(process.env.FREE_SONGS || 2);
+const FREE_SONGS = Number(process.env.FREE_SONGS || 1);
 
 let _supa = null;
 function db() {
@@ -384,6 +384,93 @@ async function grantApplePurchase(userId, jws) {
 }
 
 /* ============================================================
+   GOOGLE PLAY BILLING (Android) — mirrors the Apple flow above.
+   The native Android app makes the purchase via Google Play Billing, then hands
+   the web { productId, purchaseToken } which we VERIFY server-side against the
+   Google Play Developer API and grant ONCE (idempotent on purchase_token).
+   Needs a Google service account with Play Developer API access, supplied as the
+   full JSON key in GOOGLE_SERVICE_ACCOUNT_JSON. Inert until that env is set.
+   ============================================================ */
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || "store.bandinyourhand.twa";
+const GOOGLE_PRODUCTS = {
+  // One-off credit consumables (Play "in-app products"). Play SKUs are lowercase
+  // with underscores (no dots), so these differ from the Apple ids by punctuation.
+  "byh_credit_single": { kind: "credits", qty: 1 },
+  "byh_credit_three":  { kind: "credits", qty: 3 },
+  "byh_credit_album":  { kind: "credits", qty: 7 },
+  // Studio Pass — Play subscription.
+  "byh_studiopass_monthly": { kind: "pass" },
+};
+
+/* Exchange the service-account key for a short-lived Google OAuth2 access token.
+   Signs a JWT with the SA private key (RS256) — no external dependency. Cached. */
+let _googleTok = { token: null, exp: 0 };
+async function googleAccessToken() {
+  if (_googleTok.token && Date.now() < _googleTok.exp - 60000) return _googleTok.token;
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) throw new Error("Set GOOGLE_SERVICE_ACCOUNT_JSON (service-account key)");
+  const sa = JSON.parse(raw);
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const unsigned = b64({ alg: "RS256", typ: "JWT" }) + "." + b64({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/androidpublisher",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now, exp: now + 3600,
+  });
+  const sig = require("crypto").createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: unsigned + "." + sig }),
+  });
+  if (!r.ok) throw new Error("google token " + r.status + " " + (await r.text()).slice(0, 200));
+  const d = await r.json();
+  _googleTok = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
+  return d.access_token;
+}
+
+/* Verify a Google Play purchase and grant it. Idempotent on purchase_token. */
+async function grantGooglePurchase(userId, { productId, purchaseToken, type }) {
+  const prod = GOOGLE_PRODUCTS[productId];
+  if (!prod) throw new Error("unknown product: " + productId);
+  const isSub = type === "subscription" || prod.kind === "pass";
+  const token = await googleAccessToken();
+  const base = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/" + encodeURIComponent(ANDROID_PACKAGE);
+  const url = isSub
+    ? base + "/purchases/subscriptions/" + encodeURIComponent(productId) + "/tokens/" + encodeURIComponent(purchaseToken)
+    : base + "/purchases/products/" + encodeURIComponent(productId) + "/tokens/" + encodeURIComponent(purchaseToken);
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) throw new Error("play verify " + r.status + " " + (await r.text()).slice(0, 200));
+  const info = await r.json();
+
+  // Confirm the purchase is actually paid/complete before granting anything.
+  let expiresIso = null;
+  if (isSub) {
+    if (info.paymentState != null && ![1, 2].includes(Number(info.paymentState))) throw new Error("subscription not paid");
+    if (info.expiryTimeMillis) expiresIso = new Date(Number(info.expiryTimeMillis)).toISOString();
+  } else if (info.purchaseState != null && Number(info.purchaseState) !== 0) {
+    throw new Error("purchase not completed");
+  }
+
+  // already granted? -> idempotent no-op (Play may re-deliver the same token)
+  const { data: existing } = await db().from("google_purchases")
+    .select("purchase_token").eq("purchase_token", purchaseToken).maybeSingle();
+  if (existing) return { ok: true, alreadyGranted: true, kind: prod.kind, productId };
+
+  if (prod.kind === "credits") {
+    await db().rpc("add_balance", { p_user: userId, p_qty: prod.qty });
+  } else if (prod.kind === "pass") {
+    const until = expiresIso || new Date(Date.now() + 31 * 864e5).toISOString();
+    await db().rpc("set_pass_until", { p_user: userId, p_until: until });
+  }
+  await db().from("google_purchases").insert({
+    purchase_token: purchaseToken, order_id: info.orderId || null, user_id: userId,
+    product_id: productId, kind: prod.kind, qty: prod.qty || 0, expires_at: expiresIso,
+  });
+  return { ok: true, kind: prod.kind, productId, verified: true };
+}
+
+/* ============================================================
    THE CHARTS — a single-player "chart run", never a marketplace.
    You "Release My Song"; it debuts on the chart and rises or slips.
    You climb by SHARING (shares + reach), plus a fixed dash of chance
@@ -538,7 +625,7 @@ module.exports = {
   accountsEnabled, getUser, requireAuth,
   claimSong, releaseSong, statusFor, recordSong, listSongs, deleteSong, deleteAccount,
   createOrder, attachCheckout, findOrder, markOrderPaidAndCredit,
-  claimPassSong, releasePassSong, grantApplePurchase,
+  claimPassSong, releasePassSong, grantApplePurchase, grantGooglePurchase,
   getHouseBand, setHouseBand, releaseToCharts, recordShare, recordReach,
   listCharts, positionOf, myReleases, reportSong, getPublicSong, hitParade,
   IAP_PRODUCTS, PASS_CAP, FREE_SONGS, CHARTS_ENABLED,
