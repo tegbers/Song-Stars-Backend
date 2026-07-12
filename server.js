@@ -1549,7 +1549,7 @@ function sharePage(req, res){
     + "<p class=\"time\" id=\"time\">" + (audio ? "tap to play" : "") + "</p>"
     + "<p class=\"scene\" id=\"scene\"></p>"
     + "<a class=\"cta\" href=\"" + SHARE_SITE + "\">Make your own 🎶<small>Turn someone you love into a song</small></a>"
-    + "<p class=\"foot\">Made with <b>Band in Your Hand</b> · your first two are free 💛</p>"
+    + "<p class=\"foot\">Made with <b>Band in Your Hand</b> · your first song's free 💛</p>"
     + "</div>"
     + (audio ? ("<audio id=\"audio\" preload=\"none\" playsinline src=\"" + shHtml(audio) + "\"></audio>") : "")
     + "<script>(function(){var a=" + JSON.stringify(audio || "") + ";"
