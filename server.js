@@ -777,7 +777,7 @@ async function lyricsAnthropic(brief, opts = {}) {
 
 /* small helpers */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-async function pollUntil(fn, { tries = 40, every = 3000 } = {}) {
+async function pollUntil(fn, { tries = 120, every = 3000 } = {}) {
   for (let i = 0; i < tries; i++) {
     const v = await fn();
     if (v) return v;
@@ -1097,7 +1097,10 @@ async function viaApiframe({ title, tags, prompt, lyrics }) {
   const { jobId } = await submit.json();
   if (!jobId) throw new Error("No jobId from Apiframe");
 
-  // Poll the job until Suno finishes (~30-60s). v2 returns 2 tracks.
+  // Poll the job until Suno finishes. Suno has got slower and regularly runs past
+  // 3 minutes, which used to make us hang up on a song that was still being made
+  // (and still cost us the credits). Wait properly instead: 120 x 3s = 6 minutes.
+  // v2 returns 2 tracks.
   return pollUntil(async () => {
     const r = await fetch("https://api.apiframe.ai/v2/jobs/" + jobId, { headers });
     const d = await r.json();
@@ -1111,7 +1114,7 @@ async function viaApiframe({ title, tags, prompt, lyrics }) {
       };
     }
     return null;
-  }, { tries: 60, every: 3000 });
+  }, { tries: 120, every: 3000 });
 }
 
 /* ---------- SELF-HOSTED (gcui-art/suno-api) ----------
