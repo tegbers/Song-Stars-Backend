@@ -691,11 +691,11 @@ RULES:
 - The song must clearly be about and feature "${first}", work the name in naturally, not necessarily in every line. ${pron}
 - Use the name exactly as spelled; never a nickname; one consistent pronunciation throughout; adjust the melody before distorting the name; don't over-stress it or force awkward rhymes.
 ${must}- Use section tags on their own lines (e.g. [Verse 1], [Chorus], [Bridge]); let the chosen shape decide the structure.
-- Keep it clean, no explicit content. Concise, roughly 16 to 26 lines.
+- Match the register of what the writer gave you. Never add strong language of your own, but if their details, must-have words or their own lyrics use it, keep it in and let it land naturally rather than softening or censoring it. If the song is about a child, keep it clean regardless. Concise, roughly 16 to 26 lines.
 Output ONLY the lyrics with the section tags. Nothing else.`;
 }
 
-const LYRICS_SYSTEM = "You are a world-class comedy songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, clean, laugh-out-loud lyrics with clever wordplay, an addictive chorus and a bridge that turns.";
+const LYRICS_SYSTEM = "You are a world-class comedy songwriter. Follow the brief's writer voice, mood and style exactly, and make every song feel different. Write original, singable, laugh-out-loud lyrics with clever wordplay, an addictive chorus and a bridge that turns. Match the writer's register: never introduce strong language yourself, but never censor theirs either.";
 
 async function writeLyrics(input) {
   try {
