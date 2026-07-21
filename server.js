@@ -1101,20 +1101,38 @@ async function viaApiframe({ title, tags, prompt, lyrics }) {
   // 3 minutes, which used to make us hang up on a song that was still being made
   // (and still cost us the credits). Wait properly instead: 120 x 3s = 6 minutes.
   // v2 returns 2 tracks.
-  return pollUntil(async () => {
-    const r = await fetch("https://api.apiframe.ai/v2/jobs/" + jobId, { headers });
-    const d = await r.json();
-    if (d.status === "FAILED") throw new Error("Suno failed: " + JSON.stringify(d.error || d).slice(0, 200));
-    const tracks = d.result && d.result.tracks;
-    if (d.status === "COMPLETED" && Array.isArray(tracks) && tracks[0] && tracks[0].audioUrl) {
-      const a = tracks[0], b = tracks[1];
-      return {
-        audioUrl: a.audioUrl, imageUrl: a.imageUrl, lyrics: lyrics || null,
-        alt: b && b.audioUrl ? { audioUrl: b.audioUrl, imageUrl: b.imageUrl, lyrics: lyrics || null } : null,
-      };
-    }
-    return null;
-  }, { tries: 120, every: 3000 });
+  /* Statuses that mean "still working". Anything NOT in here and not COMPLETED is a
+     dead job. We used to only catch "FAILED", so a REJECTED / ERROR / CANCELLED job
+     (or one stuck pending) was politely polled until the clock ran out and surfaced
+     as a confusing "timed out", which told us nothing. Now it fails fast and says why. */
+  const IN_FLIGHT = new Set(["PENDING", "QUEUED", "PROCESSING", "RUNNING", "IN_PROGRESS", "STARTED", "SUBMITTED", "CREATED"]);
+  let lastStatus = "none", polls = 0;
+
+  try {
+    return await pollUntil(async () => {
+      const r = await fetch("https://api.apiframe.ai/v2/jobs/" + jobId, { headers });
+      const d = await r.json();
+      const status = String(d.status || "UNKNOWN").toUpperCase();
+      lastStatus = status; polls++;
+      if (polls === 1 || polls % 10 === 0) console.log(`apiframe job ${jobId} status=${status} poll=${polls}`);
+
+      const tracks = d.result && d.result.tracks;
+      if (status === "COMPLETED" && Array.isArray(tracks) && tracks[0] && tracks[0].audioUrl) {
+        const a = tracks[0], b = tracks[1];
+        return {
+          audioUrl: a.audioUrl, imageUrl: a.imageUrl, lyrics: lyrics || null,
+          alt: b && b.audioUrl ? { audioUrl: b.audioUrl, imageUrl: b.imageUrl, lyrics: lyrics || null } : null,
+        };
+      }
+      if (status !== "COMPLETED" && !IN_FLIGHT.has(status)) {
+        throw new Error(`Suno job ${status}: ` + JSON.stringify(d.error || d).slice(0, 200));
+      }
+      return null;
+    }, { tries: 120, every: 3000 });
+  } catch (e) {
+    console.error(`apiframe job ${jobId} ended: ${e.message} | last status=${lastStatus} after ${polls} polls`);
+    throw e;
+  }
 }
 
 /* ---------- SELF-HOSTED (gcui-art/suno-api) ----------
