@@ -24,6 +24,41 @@ function db() {
 }
 const accountsEnabled = () => !!(SUPABASE_URL && SUPABASE_SERVICE_KEY);
 
+/* ---- Owner sales alert -------------------------------------------------
+   Fire a "ka-ching, someone bought X" email to the owner on every real
+   purchase, so Theo sees sales in real time (Apple/Google reporting lags
+   1-2 days). Fire-and-forget: wrapped so it can NEVER break a purchase.
+   Needs env RESEND_API_KEY (+ optional OWNER_EMAIL, ALERT_FROM). If unset,
+   it quietly does nothing. */
+const PRODUCT_LABELS = {
+  single: "1 song", three: "3 songs", five: "5 songs", ten: "10 songs",
+  album: "an Album (7 songs)", studiopass: "a Studio Pass",
+};
+function prettyProduct(id) {
+  const key = String(id || "").toLowerCase().replace(/^byh[._]credit[._]?/, "").replace(/^byh[._]/, "").replace(/[._]monthly$/, "");
+  return PRODUCT_LABELS[key] || String(id || "a purchase");
+}
+async function notifyOwner(subject, body) {
+  try {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) return; // not configured -> no-op
+    const to = process.env.OWNER_EMAIL || "tegbers@gmail.com";
+    const from = process.env.ALERT_FROM || "Band in Your Hand <sales@bandinyourhand.store>";
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to, subject, text: body }),
+    });
+  } catch (e) { console.error("notifyOwner failed:", e.message); }
+}
+/* Build + send the alert for one sale. platform = 'Apple' | 'Google' | 'Web (PayFast)'. */
+function alertSale({ platform, productId, buyerEmail }) {
+  const what = prettyProduct(productId);
+  const subject = `Ka-ching! Someone bought ${what} 💛`;
+  const body = `Someone just bought ${what} on ${platform}.\n\nBuyer: ${buyerEmail || "unknown"}\nWhen: ${new Date().toISOString()}\n\nBand in Your Hand`;
+  notifyOwner(subject, body); // fire-and-forget
+}
+
 /* Verify a Supabase access token -> user object, or null. */
 async function getUser(token) {
   if (!token) return null;
@@ -260,6 +295,7 @@ async function markOrderPaidAndCredit({ checkoutId, orderId }) {
   } else {
     await db().rpc("add_balance", { p_user: order.user_id, p_qty: order.qty });
   }
+  try { const { data: u } = await db().from("profiles").select("email").eq("user_id", order.user_id).maybeSingle(); alertSale({ platform: "Web (PayFast)", productId: order.pack_id, buyerEmail: u && u.email }); } catch {}
   return order;
 }
 
@@ -380,6 +416,7 @@ async function grantApplePurchase(userId, jws) {
     user_id: userId, product_id: productId, kind: prod.kind, qty: prod.qty || 0,
     expires_at: expiresIso,
   });
+  try { const { data: u } = await db().from("profiles").select("email").eq("user_id", userId).maybeSingle(); alertSale({ platform: "Apple", productId, buyerEmail: u && u.email }); } catch {}
   return { ok: true, kind: prod.kind, productId, verified };
 }
 
@@ -467,6 +504,7 @@ async function grantGooglePurchase(userId, { productId, purchaseToken, type }) {
     purchase_token: purchaseToken, order_id: info.orderId || null, user_id: userId,
     product_id: productId, kind: prod.kind, qty: prod.qty || 0, expires_at: expiresIso,
   });
+  try { const { data: u } = await db().from("profiles").select("email").eq("user_id", userId).maybeSingle(); alertSale({ platform: "Google", productId, buyerEmail: u && u.email }); } catch {}
   return { ok: true, kind: prod.kind, productId, verified: true };
 }
 
